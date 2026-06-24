@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.cache/
+static/data/*.geojson
+static/data/*.json
+static/data/unmatched.txt

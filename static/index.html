@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NC City + County Trainer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQmQUFruUMJKbP6CxxgAAB3yU2FWENU=" crossorigin="" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <button id="settingsButton" class="settings-button" type="button" aria-expanded="false" aria-controls="settingsPanel">
+    Settings
+  </button>
+
+  <div id="settingsBackdrop" class="settings-backdrop hidden"></div>
+
+  <aside id="settingsPanel" class="settings-panel hidden" aria-label="Application settings">
+    <div class="settings-head">
+      <div>
+        <p class="eyebrow">App settings</p>
+        <h2>Preferences</h2>
+      </div>
+      <button id="settingsCloseButton" class="icon-button" type="button" aria-label="Close settings">X</button>
+    </div>
+
+    <section class="settings-group">
+      <div class="option-label">Theme</div>
+      <div class="segmented-control theme-control">
+        <label>
+          <input type="radio" name="appTheme" value="dark" checked />
+          <span>Dark</span>
+        </label>
+        <label>
+          <input type="radio" name="appTheme" value="beach" />
+          <span>Beach</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <div class="option-label">Display</div>
+      <button id="fullscreenButton" class="settings-action-button" type="button">Enter fullscreen</button>
+    </section>
+
+    <section class="settings-group">
+      <div class="option-label">Pointer</div>
+      <div class="segmented-control pointer-type-control">
+        <label>
+          <input type="radio" name="cursorType" value="default" checked />
+          <span>Default</span>
+        </label>
+        <label>
+          <input type="radio" name="cursorType" value="wii" />
+          <span>Wii</span>
+        </label>
+      </div>
+
+      <div id="pointerPlayerOptions" class="pointer-player-options">
+        <div class="option-label">Player</div>
+        <div class="pointer-grid">
+          <label>
+            <input type="radio" name="cursorPlayer" value="p1" checked />
+            <span>P1</span>
+          </label>
+          <label>
+            <input type="radio" name="cursorPlayer" value="p2" />
+            <span>P2</span>
+          </label>
+          <label>
+            <input type="radio" name="cursorPlayer" value="p3" />
+            <span>P3</span>
+          </label>
+          <label>
+            <input type="radio" name="cursorPlayer" value="p4" />
+            <span>P4</span>
+          </label>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">NC</div>
+      <div>
+        <p class="eyebrow">Now playing</p>
+        <h1>NC Map Trainer</h1>
+      </div>
+    </div>
+
+    <div class="game-prompt" aria-live="polite">
+      <div class="prompt-meta">
+        <span id="progressText">Ready</span>
+        <span id="modePill">City Hunt</span>
+      </div>
+      <div id="questionTitle">Ready</div>
+      <p id="questionHelp">Start a round from the menu.</p>
+      <div class="progress-track" aria-hidden="true">
+        <div id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="score-strip" aria-label="Game score">
+      <div class="score-chip">
+        <span>Correct</span>
+        <strong id="correctMetric">0</strong>
+      </div>
+      <div class="score-chip">
+        <span>Attempts</span>
+        <strong id="attemptMetric">0</strong>
+      </div>
+      <div class="score-chip">
+        <span>Accuracy</span>
+        <strong id="accuracyMetric">0%</strong>
+      </div>
+      <div id="scoreBox" class="sr-only" aria-live="polite">Score: 0 / 0</div>
+    </div>
+  </header>
+
+  <main id="startScreen" class="start-screen">
+    <section class="start-card">
+      <div class="start-hero">
+        <div class="start-mark" aria-hidden="true">NC</div>
+        <div>
+          <p class="eyebrow">North Carolina geography</p>
+          <h1>Map Trainer</h1>
+          <p>Practice cities and counties on a clean, label-free map.</p>
+        </div>
+      </div>
+
+      <input id="modeSelect" type="hidden" value="city" />
+
+      <div class="menu-section">
+        <div class="menu-heading">
+          <h2>Choose a game</h2>
+          <span id="dataNotes">Loading...</span>
+        </div>
+
+        <div class="mode-grid" role="group" aria-label="Game mode">
+          <button type="button" class="mode-card" data-mode="learn">
+            <strong>Learn</strong>
+            <span>Click counties and explore their cities.</span>
+          </button>
+          <button type="button" class="mode-card active" data-mode="city">
+            <strong>City Hunt</strong>
+            <span>Pick the county, then place the city.</span>
+          </button>
+          <button type="button" class="mode-card" data-mode="county">
+            <strong>Counties</strong>
+            <span>Pick or name North Carolina counties.</span>
+          </button>
+          <button type="button" class="mode-card" data-mode="seat">
+            <strong>County Seats</strong>
+            <span>Find the county for each seat, or name the seat from the map.</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="orderOptions" class="menu-section options-grid ordered-mode-option">
+        <label>
+          Order
+          <select id="orderSelect">
+            <option value="alpha">Alphabetical</option>
+            <option value="random">Random</option>
+            <option value="population">Population</option>
+            <option value="founded">Founded date</option>
+          </select>
+        </label>
+        <label id="directionOption" class="direction-option">
+          Direction
+          <select id="directionSelect">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="cityOptions" class="menu-section city-option">
+        <label>
+          Top results
+          <input id="cityLimitInput" type="number" min="1" step="1" placeholder="All cities" />
+        </label>
+
+        <label id="cityRadiusOption" class="range-label">
+          <span>City radius</span>
+          <strong><span id="thresholdLabel">50</span> miles</strong>
+          <input id="thresholdInput" type="range" min="1" max="100" value="50" />
+        </label>
+
+        <label class="checkrow">
+          <input id="seatStarsInput" type="checkbox" checked />
+          <span>Mark county seats with a star</span>
+        </label>
+
+        <label class="checkrow">
+          <input id="cityPointTestInput" type="checkbox" />
+          <span>Ask for the exact city spot</span>
+        </label>
+      </div>
+
+      <div id="countyFinderOptions" class="menu-section county-finder-option">
+        <div>
+          <div id="countyTaskLabel" class="option-label">County challenge</div>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="countyTask" value="pick" checked />
+              <span id="countyPickTaskLabel">Pick county</span>
+            </label>
+            <label>
+              <input type="radio" name="countyTask" value="name" />
+              <span id="countyNameTaskLabel">Name county</span>
+            </label>
+          </div>
+        </div>
+
+        <label>
+          <span id="countyLimitLabel">County limit</span>
+          <input id="countyLimitInput" type="number" min="1" max="100" step="1" placeholder="All counties" />
+        </label>
+
+        <div id="countyPickOptions">
+          <div id="countyDifficultyLabel" class="option-label">Pick county difficulty</div>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="countyFinderDifficulty" value="easy" checked />
+              <span>Easy</span>
+            </label>
+            <label>
+              <input type="radio" name="countyFinderDifficulty" value="hard" />
+              <span>Hard</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <label id="repeatMissesOption" class="menu-section checkrow">
+        <input id="repeatMissesInput" type="checkbox" checked />
+        <span>Get them all</span>
+      </label>
+
+      <button id="startButton" class="start-button" type="button" disabled>Start</button>
+    </section>
+  </main>
+
+  <main class="app-shell" aria-label="Game map">
+    <section id="mapWrap">
+      <div class="map-toolbar">
+        <button id="fitButton" type="button" class="ghost-button">Reset view</button>
+        <button id="quitButton" type="button" class="ghost-button quit-button">Quit</button>
+        <label class="map-switch">
+          <input id="highwaysInput" type="checkbox" />
+          <span>Highways</span>
+        </label>
+      </div>
+
+      <div id="map"></div>
+      <div id="mapStatus" class="map-status">Choose a game to begin.</div>
+
+      <aside id="panel" class="play-dock">
+        <section class="card question-card">
+          <div id="stageSteps" class="sr-only" aria-label="Current step"></div>
+          <div id="selectedCounty" class="selected-county hidden"></div>
+
+          <div id="typedAnswerBox" class="answer-row hidden">
+            <input id="countyNameInput" autocomplete="off" placeholder="County name" />
+            <button id="submitNameButton" type="button">Submit</button>
+          </div>
+
+          <div id="feedback"></div>
+          <button id="nextButton" class="hidden" type="button">Next</button>
+        </section>
+      </aside>
+
+      <div id="infoCard" class="hidden"></div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
