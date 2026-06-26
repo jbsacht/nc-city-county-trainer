@@ -5,6 +5,8 @@ const app = {
   map: null,
   mapRenderer: null,
   countyLayer: null,
+  countyFilterMap: null,
+  countyFilterLayer: null,
   highwayLayer: null,
   markerLayer: null,
   retiredMarkerLayer: null,
@@ -20,7 +22,11 @@ const app = {
   completedCountyNames: new Set(),
   retiredCountyResults: new Map(),
   knownCountyNames: new Set(),
+  quizCountyNames: new Set(),
+  countyFilterReady: false,
+  cityTask: "map",
   countyTask: "pick",
+  seatNoMapTask: "county",
   countyFinderDifficulty: "easy",
   appTheme: "dark",
   cursorType: "default",
@@ -39,6 +45,8 @@ const app = {
   answered: false,
   advanceArmedAt: 0,
 };
+
+const countyFilterStorageKey = "ncMapTrainerCountyFilter";
 
 const baseCountyStyle = {
   color: "#6b7a86",
@@ -191,7 +199,9 @@ function parseLimitInput(id) {
 function getSettings() {
   return {
     mode: $("modeSelect").value,
+    cityTask: getRadioValue("cityTask", "map"),
     countyTask: getRadioValue("countyTask", "pick"),
+    seatNoMapTask: getRadioValue("seatNoMapTask", "county"),
     countyFinderDifficulty: getRadioValue("countyFinderDifficulty", "easy"),
     order: $("orderSelect").value,
     direction: $("directionSelect").value,
@@ -215,6 +225,19 @@ function isCountySeatMode(mode = app.mode) {
 
 function usesCountyTaskSettings(mode = app.mode) {
   return isCountyMode(mode) || isCountySeatMode(mode);
+}
+
+function isUltraHardMode(mode = app.mode) {
+  const useActiveGameState = document.body.classList.contains("in-game") && mode === app.mode;
+  if (mode === "city") {
+    const task = useActiveGameState ? app.cityTask : getRadioValue("cityTask", "map");
+    return task === "ultra";
+  }
+  if (mode === "seat") {
+    const task = useActiveGameState ? app.countyTask : getRadioValue("countyTask", "pick");
+    return task === "ultra";
+  }
+  return false;
 }
 
 function isCountyFinderMode(mode = app.mode) {
@@ -356,6 +379,215 @@ function applyTheme(theme) {
   document.body.dataset.theme = app.appTheme;
   syncMapThemeStyles(app.appTheme);
   refreshMapTheme();
+  refreshCountyFilterMapStyles();
+}
+
+function allCountyNames() {
+  return (app.data?.counties?.features || [])
+    .map((feature) => feature.properties.name || feature.properties.NAME)
+    .filter(Boolean);
+}
+
+function isQuizCountySelected(countyName) {
+  return app.quizCountyNames.has(norm(countyName));
+}
+
+function cityCountyNames(city) {
+  return [...(city?.counties || []), city?.primary_county].filter(Boolean);
+}
+
+function cityMatchesCountyFilter(city) {
+  return cityCountyNames(city).some(isQuizCountySelected);
+}
+
+function countyFilterStyle(countyName, hovered = false) {
+  const selected = isQuizCountySelected(countyName);
+  const dark = app.appTheme !== "beach";
+  if (hovered) {
+    return {
+      color: dark ? "#7dd3fc" : "#075985",
+      weight: 2.5,
+      opacity: 1,
+      fillColor: selected
+        ? (dark ? "#15803d" : "#86efac")
+        : (dark ? "#334155" : "#d7e4e7"),
+      fillOpacity: 0.96,
+    };
+  }
+  if (selected) {
+    return {
+      color: dark ? "#4ade80" : "#166534",
+      weight: 1.5,
+      opacity: 1,
+      fillColor: dark ? "#166534" : "#86efac",
+      fillOpacity: 0.9,
+    };
+  }
+  return {
+    color: dark ? "#52606f" : "#6b8792",
+    weight: 1,
+    opacity: 0.85,
+    fillColor: dark ? "#17202b" : "#dbe8ea",
+    fillOpacity: 0.82,
+  };
+}
+
+function refreshCountyFilterMapStyles() {
+  if (!app.countyFilterLayer) return;
+  app.countyFilterLayer.eachLayer((layer) => {
+    const countyName = getCountyName(layer);
+    const selected = isQuizCountySelected(countyName);
+    layer.setStyle(countyFilterStyle(countyName));
+    const path = layer.getElement?.();
+    if (path) {
+      path.setAttribute("aria-pressed", selected ? "true" : "false");
+      path.setAttribute("aria-label", `${countyDisplayName(countyName)}, ${selected ? "included" : "excluded"}`);
+    }
+  });
+}
+
+function updateStartAvailability() {
+  const activeMode = $("modeSelect").value;
+  $("startButton").disabled = !app.data || (activeMode !== "learn" && app.quizCountyNames.size === 0);
+}
+
+function updateCountyFilterUI() {
+  const total = allCountyNames().length;
+  const selected = app.quizCountyNames.size;
+  const allSelected = total > 0 && selected === total;
+  const summary = allSelected
+    ? `All ${total} counties`
+    : selected === 0
+      ? "No counties selected"
+      : `${selected} of ${total} counties`;
+
+  $("countyFilterButton").disabled = !app.countyFilterReady;
+  $("countyFilterSummary").textContent = summary;
+  $("countyFilterStatus").textContent = allSelected
+    ? `All ${total} counties selected`
+    : `${selected} of ${total} counties selected`;
+  $("countyFilterSelectAllButton").disabled = allSelected;
+  $("countyFilterDeselectAllButton").disabled = selected === 0;
+  refreshCountyFilterMapStyles();
+  updateStartAvailability();
+}
+
+function saveCountyFilter() {
+  localStorage.setItem(countyFilterStorageKey, JSON.stringify([...app.quizCountyNames]));
+}
+
+function loadCountyFilter() {
+  const validCountyKeys = new Set(allCountyNames().map(norm));
+  let selectedCountyKeys = new Set(validCountyKeys);
+  try {
+    const saved = JSON.parse(localStorage.getItem(countyFilterStorageKey) || "null");
+    if (Array.isArray(saved)) {
+      selectedCountyKeys = new Set(saved.map(norm).filter((key) => validCountyKeys.has(key)));
+    }
+  } catch (err) {
+    console.warn("Could not load county filter", err);
+  }
+  app.quizCountyNames = selectedCountyKeys;
+  app.countyFilterReady = true;
+  updateCountyFilterUI();
+}
+
+function setCountyFilterSelection(countyNames) {
+  app.quizCountyNames = new Set(countyNames.map(norm));
+  saveCountyFilter();
+  updateCountyFilterUI();
+}
+
+function toggleCountyFilterSelection(countyName) {
+  const key = norm(countyName);
+  if (app.quizCountyNames.has(key)) {
+    app.quizCountyNames.delete(key);
+  } else {
+    app.quizCountyNames.add(key);
+  }
+  saveCountyFilter();
+  updateCountyFilterUI();
+}
+
+function bindCountyFilterLayerInteraction(layer, countyName) {
+  let lastDirectActivation = 0;
+  const activate = (event, source) => {
+    const now = performance.now();
+    if (source === "leaflet" && now - lastDirectActivation < 400) return;
+    if (source !== "leaflet") lastDirectActivation = now;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    toggleCountyFilterSelection(countyName);
+  };
+
+  layer.on({
+    mouseover: () => layer.setStyle(countyFilterStyle(countyName, true)),
+    mouseout: () => layer.setStyle(countyFilterStyle(countyName)),
+    click: (event) => activate(event.originalEvent, "leaflet"),
+    add: () => {
+      const path = layer.getElement?.();
+      if (!path || path.dataset.countyFilterBound === "true") return;
+      path.dataset.countyFilterBound = "true";
+      path.setAttribute("role", "button");
+      path.setAttribute("tabindex", "0");
+      path.addEventListener("pointerup", (event) => activate(event, "pointer"));
+      path.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") activate(event, "keyboard");
+      });
+    },
+  });
+}
+
+function initCountyFilterMap() {
+  if (app.countyFilterMap || !app.data) return;
+  app.countyFilterMap = L.map("countyFilterMap", {
+    zoomControl: false,
+    attributionControl: false,
+    dragging: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    touchZoom: false,
+    zoomAnimation: false,
+    fadeAnimation: false,
+  });
+  app.countyFilterLayer = L.geoJSON(app.data.counties, {
+    style: (feature) => countyFilterStyle(getCountyName(feature)),
+    onEachFeature: (feature, layer) => {
+      const countyName = getCountyName(feature);
+      layer.bindTooltip(countyDisplayName(countyName), {
+        direction: "top",
+        sticky: true,
+        opacity: 0.96,
+      });
+      bindCountyFilterLayerInteraction(layer, countyName);
+    },
+  }).addTo(app.countyFilterMap);
+  refreshCountyFilterMapStyles();
+  app.countyFilterMap.fitBounds(app.countyFilterLayer.getBounds(), {
+    padding: [10, 10],
+    animate: false,
+  });
+}
+
+function setCountyFilterOpen(open) {
+  $("countyFilterPanel").classList.toggle("hidden", !open);
+  $("countyFilterBackdrop").classList.toggle("hidden", !open);
+  $("countyFilterButton").setAttribute("aria-expanded", open ? "true" : "false");
+  document.body.classList.toggle("county-filter-open", open);
+  if (!open) return;
+  setSettingsOpen(false);
+  initCountyFilterMap();
+  requestAnimationFrame(() => {
+    app.countyFilterMap?.invalidateSize();
+    if (app.countyFilterLayer) {
+      app.countyFilterMap.fitBounds(app.countyFilterLayer.getBounds(), {
+        padding: [10, 10],
+        animate: false,
+      });
+    }
+  });
 }
 
 function savePreferences() {
@@ -480,19 +712,25 @@ function updateProgressBar(forceComplete = false) {
 }
 
 function modeLabel(mode = app.mode) {
+  const useActiveGameState = document.body.classList.contains("in-game") && mode === app.mode;
   if (mode === "learn") return "Learn";
   if (mode === "county") {
-    const task = mode === app.mode ? app.countyTask : getRadioValue("countyTask", "pick");
+    const task = useActiveGameState ? app.countyTask : getRadioValue("countyTask", "pick");
     if (task === "name") return "Name Counties";
-    const difficulty = mode === app.mode ? app.countyFinderDifficulty : getSettings().countyFinderDifficulty;
+    const difficulty = useActiveGameState ? app.countyFinderDifficulty : getSettings().countyFinderDifficulty;
     return `Pick Counties ${difficulty === "easy" ? "Easy" : "Hard"}`;
   }
   if (mode === "seat") {
-    const task = mode === app.mode ? app.countyTask : getRadioValue("countyTask", "pick");
+    const task = useActiveGameState ? app.countyTask : getRadioValue("countyTask", "pick");
+    if (task === "ultra") {
+      const noMapTask = useActiveGameState ? app.seatNoMapTask : getRadioValue("seatNoMapTask", "county");
+      return noMapTask === "seat" ? "No Map: Name County Seat" : "No Map: Name County";
+    }
     if (task === "name") return "Name County Seats";
-    const difficulty = mode === app.mode ? app.countyFinderDifficulty : getSettings().countyFinderDifficulty;
+    const difficulty = useActiveGameState ? app.countyFinderDifficulty : getSettings().countyFinderDifficulty;
     return `County Seats ${difficulty === "easy" ? "Easy" : "Hard"}`;
   }
+  if (mode === "city" && isUltraHardMode(mode)) return "City Hunt Ultra Hard";
   return "City Hunt";
 }
 
@@ -517,6 +755,7 @@ function renderStageSteps(steps, activeIndex = 0, doneCount = 0) {
 }
 
 function cityStageSteps() {
+  if (isUltraHardMode("city")) return ["Read city", "Type county", "Review"];
   return getSettings().testCityPoint
     ? ["County", "City spot", "Learn"]
     : ["County", "Reveal city", "Next"];
@@ -532,11 +771,14 @@ function setStageVisual(stage) {
   } else if (stage === "cityPoint") {
     renderStageSteps(cityStageSteps(), 1, 1);
     setMapStatus("Now click the city location inside the county.");
+  } else if (stage === "ultraHardCounty") {
+    renderStageSteps(["Read prompt", "Type answer", "Review"], 1, 0);
+    setMapStatus("Type your answer.");
   } else if (stage === "answered") {
     const steps = app.mode === "city" ? cityStageSteps() : ["Answer", "Review", "Next"];
     renderStageSteps(steps, 2, 2);
-    setMapStatus("Review the answer, then click anywhere to continue.");
-    $("nextButton").textContent = "Click anywhere to continue";
+    setMapStatus("Review the answer, then click anywhere or press Enter to continue.");
+    $("nextButton").textContent = "Click anywhere or press Enter";
     app.advanceArmedAt = performance.now() + 180;
   } else if (stage === "countyLocate") {
     renderStageSteps(["Read", "Click county", "Review"], 1, 0);
@@ -558,7 +800,11 @@ function setStageVisual(stage) {
 
 function updateModeButtons() {
   const active = getSettings().mode;
+  if (active === "county" && getRadioValue("countyTask", "pick") === "ultra") {
+    setRadioValue("countyTask", "pick");
+  }
   const countyTask = getRadioValue("countyTask", "pick");
+  const cityUltraHard = active === "city" && getRadioValue("cityTask", "map") === "ultra";
   const testCityPoint = $("cityPointTestInput").checked;
   const countyTaskMode = usesCountyTaskSettings(active);
   const countySeatMode = isCountySeatMode(active);
@@ -570,17 +816,23 @@ function updateModeButtons() {
   $("countyTaskLabel").textContent = countySeatMode ? "County seat challenge" : "County challenge";
   $("countyPickTaskLabel").textContent = "Pick county";
   $("countyNameTaskLabel").textContent = countySeatMode ? "Name county seat" : "Name county";
+  $("countyTaskControl").classList.toggle("three-options", countySeatMode);
   $("countyLimitLabel").textContent = countySeatMode ? "County seat limit" : "County limit";
   $("countyLimitInput").placeholder = countySeatMode ? "All county seats" : "All counties";
   $("countyDifficultyLabel").textContent = countySeatMode ? "County seat picker difficulty" : "Pick county difficulty";
   showMenuSection("orderOptions", shouldShowOrderOptions(active), "grid");
   showMenuSection("cityOptions", active === "city");
-  showMenuSection("cityRadiusOption", active === "city" && testCityPoint, "grid");
+  showMenuSection("cityRadiusOption", active === "city" && !cityUltraHard && testCityPoint, "grid");
+  showMenuSection("seatStarsOption", active === "city" && !cityUltraHard, "flex");
+  showMenuSection("cityPointTestOption", active === "city" && !cityUltraHard, "flex");
   showMenuSection("countyFinderOptions", countyTaskMode);
   showMenuSection("countyPickOptions", countyTaskMode && countyTask === "pick");
+  showMenuSection("countyUltraTaskOption", countySeatMode);
+  showMenuSection("seatNoMapOptions", countySeatMode && countyTask === "ultra");
   showMenuSection("repeatMissesOption", repeatMissesMode, "flex");
   showMenuSection("directionOption", $("orderSelect").value !== "random" && shouldShowOrderOptions(active));
   setModePill();
+  updateStartAvailability();
 }
 
 function updateOrderOptions(mode) {
@@ -632,12 +884,14 @@ function refitCurrentView() {
 function enterGameMode() {
   document.body.classList.add("in-game");
   document.body.classList.toggle("learn-mode", getSettings().mode === "learn");
+  document.body.classList.toggle("ultra-hard-mode", isUltraHardMode());
   requestAnimationFrame(refitCurrentView);
 }
 
 function exitGameMode() {
   document.body.classList.remove("in-game");
   document.body.classList.remove("learn-mode");
+  document.body.classList.remove("ultra-hard-mode");
 }
 
 function quitToMenu() {
@@ -647,6 +901,7 @@ function quitToMenu() {
   }
   app.stage = "ready";
   app.current = null;
+  $("ultraHardPrompt").textContent = "";
   $("nextButton").classList.add("hidden");
   $("typedAnswerBox").classList.add("hidden");
   setFeedback("");
@@ -1232,7 +1487,9 @@ function shuffle(arr) {
 function buildSequence() {
   const s = getSettings();
   app.mode = s.mode;
+  app.cityTask = s.cityTask;
   app.countyTask = s.countyTask;
+  app.seatNoMapTask = s.seatNoMapTask;
   app.countyFinderDifficulty = s.countyFinderDifficulty;
   setModePill();
   app.requiredCountyNames = new Set();
@@ -1242,17 +1499,22 @@ function buildSequence() {
   if (s.mode === "learn") {
     app.sequence = [];
   } else if (s.mode === "city") {
-    const usable = app.data.cities.filter((c) => Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon)));
+    const usable = app.data.cities.filter((city) => (
+      Number.isFinite(Number(city.lat))
+      && Number.isFinite(Number(city.lon))
+      && cityMatchesCountyFilter(city)
+    ));
     const sorted = sortRecords(usable, s.order, s.direction);
     app.sequence = s.cityLimit ? sorted.slice(0, s.cityLimit) : sorted;
     if (s.repeatMisses) app.requiredCountyNames = new Set(app.sequence.map(cityQuestionKey));
   } else if (s.mode === "county") {
-    const names = app.data.counties.features.map((f) => f.properties.name || f.properties.NAME);
+    const names = allCountyNames().filter(isQuizCountySelected);
     const sorted = sortCountyNames(names, s.order, s.direction);
     app.sequence = s.countyLimit ? sorted.slice(0, s.countyLimit) : sorted;
     if (s.repeatMisses || s.countyTask === "pick") app.requiredCountyNames = new Set(app.sequence);
   } else if (s.mode === "seat") {
-    const sorted = sortCountySeatRecords(countySeatRecords(), s.order, s.direction);
+    const filteredSeats = countySeatRecords().filter((seat) => isQuizCountySelected(seatCountyName(seat)));
+    const sorted = sortCountySeatRecords(filteredSeats, s.order, s.direction);
     app.sequence = s.countyLimit ? sorted.slice(0, s.countyLimit) : sorted;
     app.requiredCountyNames = new Set(app.sequence.map(seatCountyName));
   } else {
@@ -1274,7 +1536,7 @@ function currentProgress() {
 }
 
 function startQuiz() {
-  if (!app.data) return;
+  if (!app.data || (getSettings().mode !== "learn" && app.quizCountyNames.size === 0)) return;
   buildSequence();
   enterGameMode();
   $("nextButton").classList.add("hidden");
@@ -1326,6 +1588,7 @@ function nextQuestion() {
     return;
   }
   resetVisuals();
+  $("ultraHardPrompt").textContent = "";
   setFeedback("");
   $("nextButton").classList.add("hidden");
   $("nextButton").textContent = "Click anywhere to continue";
@@ -1336,12 +1599,17 @@ function nextQuestion() {
   if (app.mode === "county" && app.countyTask === "name") askCountyNameQuestion();
   if (app.mode === "seat" && app.countyTask === "pick") askCountySeatPickQuestion();
   if (app.mode === "seat" && app.countyTask === "name") askCountySeatNameQuestion();
+  if (app.mode === "seat" && app.countyTask === "ultra") askCountySeatUltraHardQuestion();
 }
 
 function askCityQuestion() {
   const s = getSettings();
   const city = app.sequence[app.index];
   app.current = city;
+  if (app.cityTask === "ultra") {
+    askUltraHardCountyQuestion(city, "city");
+    return;
+  }
   app.stage = "cityCounty";
   app.cityCountyCorrect = false;
   app.answered = false;
@@ -1350,6 +1618,49 @@ function askCityQuestion() {
   $("questionTitle").textContent = `${city.name}${star}`;
   $("questionHelp").textContent = "Pick the county.";
   setStageVisual("cityCounty");
+}
+
+function askUltraHardCountyQuestion(item, kind) {
+  const config = noMapQuestionConfig(item, kind);
+  app.current = item;
+  app.stage = "ultraHardCounty";
+  app.answered = false;
+  $("progressText").textContent = currentProgress();
+  $("questionTitle").textContent = config.prompt;
+  $("ultraHardPrompt").textContent = config.prompt;
+  $("questionHelp").textContent = config.help;
+  $("typedAnswerBox").classList.remove("hidden");
+  $("countyNameInput").placeholder = config.placeholder;
+  $("countyNameInput").value = "";
+  setStageVisual("ultraHardCounty");
+  setTimeout(() => $("countyNameInput").focus(), 50);
+}
+
+function noMapQuestionConfig(item, kind = app.mode) {
+  if (kind === "seat" && app.seatNoMapTask === "seat") {
+    const county = seatCountyName(item);
+    return {
+      prompt: countyDisplayName(county),
+      help: "What is this county's seat?",
+      placeholder: "County seat name",
+      answers: [item.name],
+      answerText: item.name,
+      resultText: `${item.name} is the county seat of ${countyDisplayName(county)}.`,
+    };
+  }
+
+  const counties = kind === "seat"
+    ? [seatCountyName(item)].filter(Boolean)
+    : uniqueCountyNames(cityCountyNames(item));
+  const answerText = counties.map(countyDisplayName).join(" / ");
+  return {
+    prompt: item.name,
+    help: kind === "seat" ? "Which county has this county seat?" : "Which county is this city in?",
+    placeholder: "County name",
+    answers: counties,
+    answerText,
+    resultText: `${item.name} is in ${answerText}.`,
+  };
 }
 
 function askCountyLocateQuestion() {
@@ -1425,6 +1736,19 @@ function askCountySeatNameQuestion() {
   setSelectedCounty(county, "", "County", "Name the seat shown on the map.");
   setStageVisual("countySeatName");
   setTimeout(() => $("countyNameInput").focus(), 50);
+}
+
+function askCountySeatUltraHardQuestion() {
+  const seat = app.sequence[app.index];
+  if (!seat) {
+    app.stage = "finished";
+    $("progressText").textContent = "Finished";
+    $("questionTitle").textContent = "Done!";
+    $("questionHelp").textContent = "No county seats left in this round.";
+    setMapStatus("Session complete.");
+    return;
+  }
+  askUltraHardCountyQuestion(seat, "seat");
 }
 
 function onCountyClick(feature, layer, event) {
@@ -1556,6 +1880,10 @@ function handleCountyLocateClick(clicked, layer) {
 }
 
 function handleCountyNameSubmit() {
+  if (app.stage === "ultraHardCounty") {
+    handleUltraHardCountySubmit();
+    return;
+  }
   if (app.stage === "countySeatName") {
     handleCountySeatNameSubmit();
     return;
@@ -1579,6 +1907,49 @@ function handleCountyNameSubmit() {
   setFeedback(correct
     ? `<span class="good">Correct.</span> That is ${escapeHtml(target)} County.`
     : `<span class="bad">Not quite.</span> The highlighted county is <b>${escapeHtml(target)} County</b>.${repeatMisses ? " It will come back later." : ""}`);
+  $("nextButton").classList.remove("hidden");
+  app.stage = "answered";
+  app.answered = true;
+  setStageVisual("answered");
+}
+
+function uniqueCountyNames(countyNames) {
+  const seen = new Set();
+  return countyNames.filter((county) => {
+    const key = norm(county);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function handleUltraHardCountySubmit() {
+  if (app.stage !== "ultraHardCounty") return;
+  const item = app.current;
+  const config = noMapQuestionConfig(item);
+  const answer = $("countyNameInput").value;
+  const correct = config.answers.some((expected) => norm(answer) === norm(expected));
+  const repeatKey = app.mode === "city" ? cityQuestionKey(item) : seatCountyName(item);
+
+  app.scoreTotal += 1;
+  if (correct) app.scoreCorrect += 1;
+  recordRepeatProgress(correct, item, repeatKey);
+  updateScore();
+  updateProgressBar(true);
+
+  $("typedAnswerBox").classList.add("hidden");
+  const resultNode = $("selectedCounty");
+  resultNode.className = `selected-county ${correct ? "good" : "bad"}`;
+  resultNode.innerHTML = `
+    <span>Correct answer</span>
+    <strong>${escapeHtml(config.answerText)}</strong>
+    <em>${escapeHtml(correct ? "Answer accepted." : `You answered ${answer || "nothing"}.`)}</em>
+  `;
+  updateDockVisibility();
+  setFeedback(correct
+    ? `<span class="good">Correct.</span> ${escapeHtml(config.resultText)}`
+    : `<span class="bad">Not quite.</span> ${escapeHtml(config.resultText)}${getSettings().repeatMisses ? " It will come back later." : ""}`);
+  $("questionHelp").textContent = config.answerText;
   $("nextButton").classList.remove("hidden");
   app.stage = "answered";
   app.answered = true;
@@ -1716,10 +2087,10 @@ function isAdvanceBlockedTarget(target) {
   ].join(",")));
 }
 
-function advanceIfReady(event) {
+function advanceIfReady(event, options = {}) {
   if (app.stage !== "answered") return false;
   if (performance.now() < app.advanceArmedAt) return false;
-  if (event && isAdvanceBlockedTarget(event.target)) return false;
+  if (!options.allowBlockedTarget && event && isAdvanceBlockedTarget(event.target)) return false;
   app.index += 1;
   nextQuestion();
   return true;
@@ -1939,7 +2310,7 @@ async function bootstrap() {
     $("questionTitle").textContent = "Ready";
     $("questionHelp").textContent = "Start a round from the menu.";
     $("progressText").textContent = "Data loaded";
-    $("startButton").disabled = false;
+    loadCountyFilter();
     exitGameMode();
     updateModeButtons();
     setStageVisual("ready");
@@ -1972,6 +2343,12 @@ $("orderSelect").addEventListener("change", () => {
 document.querySelectorAll('input[name="countyTask"]').forEach((input) => {
   input.addEventListener("change", updateModeButtons);
 });
+document.querySelectorAll('input[name="cityTask"]').forEach((input) => {
+  input.addEventListener("change", updateModeButtons);
+});
+document.querySelectorAll('input[name="seatNoMapTask"]').forEach((input) => {
+  input.addEventListener("change", updateModeButtons);
+});
 document.querySelectorAll('input[name="countyFinderDifficulty"]').forEach((input) => {
   input.addEventListener("change", updateModeButtons);
 });
@@ -1988,10 +2365,23 @@ $("settingsButton").addEventListener("click", () => setSettingsOpen(true));
 $("settingsCloseButton").addEventListener("click", () => setSettingsOpen(false));
 $("settingsBackdrop").addEventListener("click", () => setSettingsOpen(false));
 $("fullscreenButton").addEventListener("click", toggleFullscreen);
+$("countyFilterButton").addEventListener("click", () => setCountyFilterOpen(true));
+$("countyFilterCloseButton").addEventListener("click", () => setCountyFilterOpen(false));
+$("countyFilterDoneButton").addEventListener("click", () => setCountyFilterOpen(false));
+$("countyFilterBackdrop").addEventListener("click", () => setCountyFilterOpen(false));
+$("countyFilterSelectAllButton").addEventListener("click", () => setCountyFilterSelection(allCountyNames()));
+$("countyFilterDeselectAllButton").addEventListener("click", () => setCountyFilterSelection([]));
 document.addEventListener("fullscreenchange", updateFullscreenButton);
 document.addEventListener("keydown", (event) => {
   toggleHoveredLearnCountyKnown(event);
-  if (event.key === "Escape") setSettingsOpen(false);
+  if (event.key === "Enter" && !event.repeat) {
+    const advanced = advanceIfReady(event, { allowBlockedTarget: true });
+    if (advanced) event.preventDefault();
+  }
+  if (event.key === "Escape") {
+    setSettingsOpen(false);
+    setCountyFilterOpen(false);
+  }
 });
 document.addEventListener("mouseup", () => document.body.classList.remove("map-dragging"));
 document.addEventListener("click", (event) => {

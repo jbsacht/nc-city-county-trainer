@@ -79,6 +79,39 @@
     </section>
   </aside>
 
+  <div id="countyFilterBackdrop" class="county-filter-backdrop hidden"></div>
+
+  <section
+    id="countyFilterPanel"
+    class="county-filter-panel hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="countyFilterTitle"
+  >
+    <div class="county-filter-head">
+      <div>
+        <p class="eyebrow">Quiz scope</p>
+        <h2 id="countyFilterTitle">Filter Counties</h2>
+      </div>
+      <button id="countyFilterCloseButton" class="icon-button" type="button" aria-label="Close county filter">X</button>
+    </div>
+
+    <div class="county-filter-controls">
+      <strong id="countyFilterStatus">All counties selected</strong>
+      <div>
+        <button id="countyFilterSelectAllButton" class="filter-control-button" type="button">Select all</button>
+        <button id="countyFilterDeselectAllButton" class="filter-control-button" type="button">Deselect all</button>
+      </div>
+    </div>
+
+    <div id="countyFilterMap" aria-label="County quiz filter map"></div>
+
+    <div class="county-filter-footer">
+      <span>Click any county to include or exclude it. Green counties are included in quizzes.</span>
+      <button id="countyFilterDoneButton" class="filter-done-button" type="button">Done</button>
+    </div>
+  </section>
+
   <header class="topbar">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">NC</div>
@@ -143,7 +176,7 @@
           </button>
           <button type="button" class="mode-card active" data-mode="city">
             <strong>City Hunt</strong>
-            <span>Pick the county, then place the city.</span>
+            <span>Pick or type the county for each city.</span>
           </button>
           <button type="button" class="mode-card" data-mode="county">
             <strong>Counties</strong>
@@ -154,6 +187,11 @@
             <span>Find the county for each seat, or name the seat from the map.</span>
           </button>
         </div>
+
+        <button id="countyFilterButton" class="county-filter-launch" type="button" disabled>
+          <span>Filter counties</span>
+          <strong id="countyFilterSummary">Loading counties...</strong>
+        </button>
       </div>
 
       <div id="orderOptions" class="menu-section options-grid ordered-mode-option">
@@ -176,6 +214,20 @@
       </div>
 
       <div id="cityOptions" class="menu-section city-option">
+        <div>
+          <div class="option-label">City challenge</div>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="cityTask" value="map" checked />
+              <span>Use map</span>
+            </label>
+            <label>
+              <input type="radio" name="cityTask" value="ultra" />
+              <span>Ultra Hard</span>
+            </label>
+          </div>
+        </div>
+
         <label>
           Top results
           <input id="cityLimitInput" type="number" min="1" step="1" placeholder="All cities" />
@@ -187,12 +239,12 @@
           <input id="thresholdInput" type="range" min="1" max="100" value="50" />
         </label>
 
-        <label class="checkrow">
+        <label id="seatStarsOption" class="checkrow">
           <input id="seatStarsInput" type="checkbox" checked />
           <span>Mark county seats with a star</span>
         </label>
 
-        <label class="checkrow">
+        <label id="cityPointTestOption" class="checkrow">
           <input id="cityPointTestInput" type="checkbox" />
           <span>Ask for the exact city spot</span>
         </label>
@@ -201,7 +253,7 @@
       <div id="countyFinderOptions" class="menu-section county-finder-option">
         <div>
           <div id="countyTaskLabel" class="option-label">County challenge</div>
-          <div class="segmented-control">
+          <div id="countyTaskControl" class="segmented-control">
             <label>
               <input type="radio" name="countyTask" value="pick" checked />
               <span id="countyPickTaskLabel">Pick county</span>
@@ -209,6 +261,10 @@
             <label>
               <input type="radio" name="countyTask" value="name" />
               <span id="countyNameTaskLabel">Name county</span>
+            </label>
+            <label id="countyUltraTaskOption">
+              <input type="radio" name="countyTask" value="ultra" />
+              <span>No Map</span>
             </label>
           </div>
         </div>
@@ -228,6 +284,20 @@
             <label>
               <input type="radio" name="countyFinderDifficulty" value="hard" />
               <span>Hard</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="seatNoMapOptions">
+          <div class="option-label">No map question</div>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="seatNoMapTask" value="county" checked />
+              <span>Name County</span>
+            </label>
+            <label>
+              <input type="radio" name="seatNoMapTask" value="seat" />
+              <span>Name County Seat</span>
             </label>
           </div>
         </div>
@@ -260,6 +330,7 @@
       <aside id="panel" class="play-dock">
         <section class="card question-card">
           <div id="stageSteps" class="sr-only" aria-label="Current step"></div>
+          <div id="ultraHardPrompt" class="ultra-hard-prompt" aria-live="polite"></div>
           <div id="selectedCounty" class="selected-county hidden"></div>
 
           <div id="typedAnswerBox" class="answer-row hidden">

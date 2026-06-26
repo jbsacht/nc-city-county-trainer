@@ -148,6 +148,119 @@ input:focus {
   background: rgba(0, 0, 0, 0.34);
 }
 
+.county-filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 995;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+}
+
+.county-filter-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 1000;
+  width: min(920px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, -50%);
+}
+
+.county-filter-head,
+.county-filter-controls,
+.county-filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.county-filter-head {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.county-filter-head h2 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.county-filter-controls {
+  margin-bottom: 12px;
+}
+
+.county-filter-controls > strong {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.county-filter-controls > div {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-control-button,
+.filter-done-button {
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.filter-control-button:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+#countyFilterMap {
+  width: 100%;
+  height: clamp(310px, 54vh, 520px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--map-bg);
+}
+
+#countyFilterMap .leaflet-interactive {
+  cursor: pointer;
+  pointer-events: auto;
+  transition: fill 100ms ease, fill-opacity 100ms ease, stroke 100ms ease;
+}
+
+#countyFilterMap .leaflet-interactive:focus {
+  outline: none;
+  filter: drop-shadow(0 0 5px var(--teal));
+}
+
+.county-filter-footer {
+  margin-top: 14px;
+}
+
+.county-filter-footer span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.filter-done-button {
+  min-width: 116px;
+  color: #031008;
+  border-color: transparent;
+  background: var(--green);
+}
+
+body.county-filter-open {
+  overflow: hidden;
+}
+
 .settings-panel {
   position: fixed;
   top: 66px;
@@ -355,6 +468,36 @@ body[data-theme="beach"] .start-screen::after {
   line-height: 1.35;
 }
 
+.county-filter-launch {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 12px 15px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.035);
+  text-align: left;
+}
+
+.county-filter-launch:hover {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.county-filter-launch > span {
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.county-filter-launch > strong {
+  color: var(--green);
+  font-size: 13px;
+}
+
 .options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -510,6 +653,18 @@ body.wii-pointer #countyNameInput {
   gap: 8px;
 }
 
+.segmented-control.three-options {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+#countyUltraTaskOption {
+  display: none;
+}
+
+#seatNoMapOptions {
+  display: none;
+}
+
 .segmented-control label {
   margin: 0;
 }
@@ -567,6 +722,71 @@ body.in-game .app-shell {
 
 body.in-game {
   overflow: hidden;
+}
+
+body.in-game.ultra-hard-mode #map {
+  visibility: hidden;
+}
+
+body.in-game.ultra-hard-mode #mapWrap {
+  background:
+    linear-gradient(rgba(2, 6, 23, 0.82), rgba(2, 6, 23, 0.82)),
+    var(--app-bg);
+}
+
+body[data-theme="beach"].in-game.ultra-hard-mode #mapWrap {
+  background:
+    linear-gradient(rgba(255, 247, 223, 0.78), rgba(255, 247, 223, 0.78)),
+    var(--app-bg);
+}
+
+body.in-game.ultra-hard-mode #fitButton,
+body.in-game.ultra-hard-mode .map-switch,
+body.in-game.ultra-hard-mode .map-status,
+body.in-game.ultra-hard-mode #infoCard,
+body.in-game.ultra-hard-mode .learn-dots-layer {
+  display: none !important;
+}
+
+body.in-game.ultra-hard-mode .play-dock {
+  top: 52%;
+  bottom: auto;
+  width: min(620px, calc(100% - 28px));
+  transform: translate(-50%, -50%);
+}
+
+body.in-game.ultra-hard-mode .question-card {
+  padding: 20px;
+  border-color: var(--line-strong);
+  background: var(--panel);
+}
+
+.ultra-hard-prompt {
+  display: none;
+}
+
+body.in-game.ultra-hard-mode .ultra-hard-prompt {
+  display: block;
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 44px;
+  font-weight: 950;
+  line-height: 1.05;
+  text-align: center;
+}
+
+body.in-game.ultra-hard-mode .answer-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+body.in-game.ultra-hard-mode #countyNameInput {
+  min-height: 52px;
+  font-size: 18px;
+}
+
+body.in-game.ultra-hard-mode #submitNameButton {
+  min-width: 110px;
 }
 
 .brand {
@@ -1125,8 +1345,37 @@ body.in-game.learn-mode .score-strip {
     max-height: calc(100vh - 66px);
   }
 
+  .county-filter-panel {
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
+    padding: 14px;
+  }
+
+  .county-filter-controls,
+  .county-filter-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .county-filter-controls > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #countyFilterMap {
+    height: min(52vh, 420px);
+  }
+
+  .filter-done-button {
+    width: 100%;
+  }
+
   #questionTitle {
     font-size: 22px;
+  }
+
+  body.in-game.ultra-hard-mode .ultra-hard-prompt {
+    font-size: 32px;
   }
 
   .map-toolbar {
