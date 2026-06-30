@@ -25,6 +25,7 @@ import requests
 from bs4 import BeautifulSoup
 from rapidfuzz import process, fuzz
 from shapely.geometry import Point
+from shapely.ops import linemerge, unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DATA = ROOT / "static" / "data"
@@ -127,6 +128,27 @@ def primary_roads_candidates() -> list[tuple[str, str]]:
         out.append((
             f"https://www2.census.gov/geo/tiger/TIGER{year}/PRIMARYROADS/tl_{year}_us_primaryroads.zip",
             f"tl_{year}_us_primaryroads.zip",
+        ))
+    return out
+
+
+def prisec_roads_candidates() -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for year in TIGER_YEARS:
+        out.append((
+            f"https://www2.census.gov/geo/tiger/TIGER{year}/PRISECROADS/tl_{year}_37_prisecroads.zip",
+            f"tl_{year}_37_prisecroads.zip",
+        ))
+    return out
+
+
+def county_water_candidates(geoid: str, layer: str) -> list[tuple[str, str]]:
+    folder = layer.upper()
+    out: list[tuple[str, str]] = []
+    for year in TIGER_YEARS:
+        out.append((
+            f"https://www2.census.gov/geo/tiger/TIGER{year}/{folder}/tl_{year}_{geoid}_{layer}.zip",
+            f"tl_{year}_{geoid}_{layer}.zip",
         ))
     return out
 
@@ -514,7 +536,10 @@ def wikidata_claims(qids: list[str]) -> dict[str, dict[str, Any]]:
 def load_geo_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, dict[str, str]]:
     county_path, county_source = download_first(county_zip_candidates(), "county boundaries")
     place_path, place_source = download_first(place_zip_candidates(), "place boundaries")
-    roads_path, roads_source = download_first(primary_roads_candidates(), "primary roads")
+    try:
+        roads_path, roads_source = download_first(prisec_roads_candidates(), "NC primary and secondary roads")
+    except RuntimeError:
+        roads_path, roads_source = download_first(primary_roads_candidates(), "primary roads")
 
     print("Reading county/place boundaries...")
     counties = gpd.read_file(county_path).to_crs(4326)
@@ -539,27 +564,162 @@ def load_geo_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFr
         nc_union = counties.to_crs(5070).union_all()
         roads_5070 = roads.to_crs(5070)
         roads = roads[roads_5070.intersects(nc_union)].copy().to_crs(4326)
+        if "RTTYP" in roads.columns:
+            roads["route_type"] = roads["RTTYP"].fillna("")
+            roads = roads[roads["route_type"].isin(["I", "U", "S"])].copy()
+        else:
+            roads["route_type"] = ""
+        roads["mtfcc"] = roads["MTFCC"].fillna("") if "MTFCC" in roads.columns else ""
         if "FULLNAME" in roads.columns:
             roads["name"] = roads["FULLNAME"].fillna("")
         else:
             roads["name"] = ""
-        roads = roads[["name", "geometry"]]
-        roads["geometry"] = roads.geometry.simplify(0.002, preserve_topology=False)
+        roads = roads[["name", "route_type", "mtfcc", "geometry"]]
+        roads_projected = roads.to_crs(5070)
+        roads_projected["geometry"] = roads_projected.geometry.intersection(nc_union)
+        roads_projected = roads_projected[~roads_projected.geometry.is_empty].copy()
+        roads_projected["geometry"] = roads_projected.geometry.simplify(110, preserve_topology=False)
+        merged_rows: list[dict[str, Any]] = []
+        for (name, route_type, mtfcc), group in roads_projected.groupby(["name", "route_type", "mtfcc"], dropna=False):
+            geometry = unary_union(list(group.geometry))
+            try:
+                geometry = linemerge(geometry)
+            except ValueError:
+                pass
+            if geometry.is_empty:
+                continue
+            merged_rows.append({
+                "name": name,
+                "route_type": route_type,
+                "mtfcc": mtfcc,
+                "geometry": geometry,
+            })
+        roads = gpd.GeoDataFrame(merged_rows, geometry="geometry", crs=roads_projected.crs).to_crs(4326)
     except Exception as e:
         print(f"Warning: primary roads failed, writing empty layer: {e}")
-        roads = gpd.GeoDataFrame({"name": []}, geometry=[], crs=4326)
+        roads = gpd.GeoDataFrame({"name": [], "route_type": [], "mtfcc": []}, geometry=[], crs=4326)
 
     counties["name"] = counties["NAME"]
     counties["geoid"] = counties["GEOID"]
     counties_out = counties[["geoid", "name", "geometry"]].copy()
     counties_out.to_file(STATIC_DATA / "counties.geojson", driver="GeoJSON")
     roads.to_file(STATIC_DATA / "highways.geojson", driver="GeoJSON")
+    water_sources = write_water_layer(counties)
     sources = {
         "county_boundary_source": county_source,
         "place_boundary_source": place_source,
         "primary_roads_source": roads_source,
+        **water_sources,
     }
     return counties, places, roads, sources
+
+
+def write_water_layer(counties: gpd.GeoDataFrame) -> dict[str, str]:
+    print("Reading/filtering water features...")
+    county_geoids = sorted(counties["GEOID"].astype(str).tolist())
+    nc_union = counties.to_crs(5070).union_all()
+    area_parts: list[gpd.GeoDataFrame] = []
+    river_parts: list[gpd.GeoDataFrame] = []
+    area_source = ""
+    river_source = ""
+
+    for geoid in county_geoids:
+        try:
+            area_path, area_url = download_first(county_water_candidates(geoid, "areawater"), f"{geoid} area water")
+            if not area_source:
+                area_source = area_url
+            area = gpd.read_file(area_path).to_crs(4326)
+            area["name"] = area["FULLNAME"].fillna("") if "FULLNAME" in area.columns else ""
+            area["mtfcc"] = area["MTFCC"].fillna("") if "MTFCC" in area.columns else ""
+            area["awater"] = pd.to_numeric(area.get("AWATER", 0), errors="coerce").fillna(0).astype(int)
+            important_name = area["name"].str.contains(
+                r"Lake|Lk|Reservoir|Sound|Bay|Ocean|River|\bRiv\b",
+                case=False,
+                regex=True,
+                na=False,
+            )
+            area = area[
+                (area["awater"] >= 300000)
+                | (important_name & (area["awater"] >= 90000))
+            ].copy()
+            if not area.empty:
+                area["water_kind"] = "area"
+                area["source_id"] = area["HYDROID"].fillna("") if "HYDROID" in area.columns else ""
+                area_parts.append(area[["name", "mtfcc", "awater", "water_kind", "source_id", "geometry"]])
+        except Exception as e:
+            print(f"  Warning: {geoid} area water failed: {e}")
+
+        try:
+            line_path, line_url = download_first(county_water_candidates(geoid, "linearwater"), f"{geoid} linear water")
+            if not river_source:
+                river_source = line_url
+            lines = gpd.read_file(line_path).to_crs(4326)
+            lines["name"] = lines["FULLNAME"].fillna("") if "FULLNAME" in lines.columns else ""
+            lines["mtfcc"] = lines["MTFCC"].fillna("") if "MTFCC" in lines.columns else ""
+            river_mask = lines["name"].str.contains(r"\bRiv\b|River", case=False, regex=True, na=False)
+            lines = lines[river_mask].copy()
+            if not lines.empty:
+                lines["awater"] = 0
+                lines["water_kind"] = "river"
+                lines["source_id"] = lines["LINEARID"].fillna("") if "LINEARID" in lines.columns else ""
+                river_parts.append(lines[["name", "mtfcc", "awater", "water_kind", "source_id", "geometry"]])
+        except Exception as e:
+            print(f"  Warning: {geoid} linear water failed: {e}")
+
+    parts = [part for part in [*area_parts, *river_parts] if not part.empty]
+    if not parts:
+        print("Warning: no water features found")
+        gpd.GeoDataFrame(
+            {"name": [], "mtfcc": [], "awater": [], "water_kind": [], "source_id": []},
+            geometry=[],
+            crs=4326,
+        ).to_file(STATIC_DATA / "water.geojson", driver="GeoJSON")
+        return {
+            "area_water_source": area_source,
+            "linear_water_source": river_source,
+        }
+
+    water = pd.concat(parts, ignore_index=True)
+    water = gpd.GeoDataFrame(water, geometry="geometry", crs=4326)
+    water = water.drop_duplicates(subset=["water_kind", "source_id"])
+    water_projected = water.to_crs(5070)
+    water_projected = water_projected[water_projected.geometry.intersects(nc_union)].copy()
+    water_projected["geometry"] = water_projected.geometry.intersection(nc_union)
+    water_projected = water_projected[~water_projected.geometry.is_empty].copy()
+
+    merged_rows: list[dict[str, Any]] = []
+    named = water_projected[water_projected["name"] != ""].copy()
+    unnamed = water_projected[water_projected["name"] == ""].copy()
+    for (name, kind, mtfcc), group in named.groupby(["name", "water_kind", "mtfcc"], dropna=False):
+        geometry = unary_union(list(group.geometry))
+        if kind == "river":
+            try:
+                geometry = linemerge(geometry)
+            except ValueError:
+                pass
+        if geometry.is_empty:
+            continue
+        merged_rows.append({
+            "name": name,
+            "mtfcc": mtfcc,
+            "awater": int(group["awater"].max()),
+            "water_kind": kind,
+            "source_id": "",
+            "geometry": geometry,
+        })
+    for _, row in unnamed.iterrows():
+        merged_rows.append(row.to_dict())
+
+    water_projected = gpd.GeoDataFrame(merged_rows, geometry="geometry", crs=water_projected.crs)
+    water_projected["geometry"] = water_projected.geometry.simplify(120, preserve_topology=True)
+    water_projected = water_projected[~water_projected.geometry.is_empty].copy()
+    water = water_projected.to_crs(4326)
+    water.to_file(STATIC_DATA / "water.geojson", driver="GeoJSON")
+    print(f"Wrote {len(water)} water features")
+    return {
+        "area_water_source": area_source,
+        "linear_water_source": river_source,
+    }
 
 
 def match_places_to_municipalities(
@@ -661,6 +821,29 @@ def match_places_to_municipalities(
     return records
 
 
+def write_city_outlines(places: gpd.GeoDataFrame, cities: list[dict[str, Any]]) -> None:
+    print("Writing city outline layer...")
+    geoids = {str(city.get("place_geoid")) for city in cities if city.get("place_geoid")}
+    outlines = places[places["GEOID"].astype(str).isin(geoids)].copy()
+    if outlines.empty:
+        print("Warning: no matching city outlines found")
+        gpd.GeoDataFrame({"geoid": [], "name": []}, geometry=[], crs=4326).to_file(
+            STATIC_DATA / "city_outlines.geojson",
+            driver="GeoJSON",
+        )
+        return
+
+    outlines["geoid"] = outlines["GEOID"].astype(str)
+    outlines["name"] = outlines["NAME"].map(clean_text)
+    outlines = outlines[["geoid", "name", "geometry"]].copy()
+
+    projected = outlines.to_crs(5070)
+    projected["geometry"] = projected.geometry.simplify(45, preserve_topology=True)
+    outlines = projected.to_crs(4326)
+    outlines.to_file(STATIC_DATA / "city_outlines.geojson", driver="GeoJSON")
+    print(f"Wrote {len(outlines)} city outlines")
+
+
 def main() -> None:
     municipalities = parse_municipality_list()
     county_seats = parse_county_seats()
@@ -688,6 +871,7 @@ def main() -> None:
         county_seats=county_seats,
     )
 
+    write_city_outlines(places, cities)
     (STATIC_DATA / "cities.json").write_text(json.dumps(cities, indent=2), encoding="utf-8")
     metadata = {
         "municipality_source": WIKI_MUNICIPALITIES,
@@ -700,6 +884,9 @@ def main() -> None:
         "generated_at_unix": int(time.time()),
         "notes": [
             "City quiz locations use Census place polygon centroids when available.",
+            "Optional city outlines use simplified Census place polygons matched by GEOID.",
+            "Highways include Interstate, US, and NC state routes from Census TIGER primary and secondary roads.",
+            "Water includes simplified TIGER area-water polygons plus named river centerlines.",
             "Founded dates are from Wikidata P571 when available, so some records may be blank.",
             "Population is 2020 Census place population when the Census API returns it; otherwise the Wikipedia municipality table is used where available.",
         ],

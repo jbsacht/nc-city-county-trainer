@@ -541,22 +541,22 @@ input[type="range"] {
   accent-color: var(--teal);
 }
 
-.checkrow,
-.map-switch {
+.checkrow {
   display: flex;
   align-items: center;
   gap: 9px;
 }
 
-.checkrow input,
-.map-switch input {
+.checkrow input {
   width: 16px;
   height: 16px;
   margin: 0;
   accent-color: var(--teal);
 }
 
+.learn-option > * + *,
 .city-option > * + *,
+.specific-picker-option > * + *,
 .county-finder-option > * + *,
 #countyPickOptions > * + * {
   margin-top: 14px;
@@ -741,7 +741,7 @@ body[data-theme="beach"].in-game.ultra-hard-mode #mapWrap {
 }
 
 body.in-game.ultra-hard-mode #fitButton,
-body.in-game.ultra-hard-mode .map-switch,
+body.in-game.ultra-hard-mode .map-display-menu,
 body.in-game.ultra-hard-mode .map-status,
 body.in-game.ultra-hard-mode #infoCard,
 body.in-game.ultra-hard-mode .learn-dots-layer {
@@ -927,7 +927,7 @@ body.in-game.learn-mode .score-strip {
   position: absolute;
   right: 14px;
   bottom: 14px;
-  z-index: 500;
+  z-index: 820;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -936,7 +936,6 @@ body.in-game.learn-mode .score-strip {
 }
 
 .ghost-button,
-.map-switch,
 .map-status,
 .question-card,
 #infoCard {
@@ -958,20 +957,79 @@ body.in-game.learn-mode .score-strip {
   border-color: rgba(251, 113, 133, 0.44);
 }
 
-.map-switch {
-  min-height: 38px;
-  margin: 0;
-  padding: 8px 10px;
+.map-display-menu {
+  position: relative;
+}
+
+.map-display-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 1;
+  width: min(260px, calc(100vw - 28px));
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--panel-glass);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.map-display-section + .map-display-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.map-display-section .checkrow {
+  min-height: 32px;
+  justify-content: space-between;
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 850;
+}
+
+.map-display-section .checkrow + .checkrow {
+  margin-top: 8px;
+}
+
+.map-toggle-group + .checkrow,
+.map-submenu + .checkrow {
+  margin-top: 8px;
+}
+
+.map-submenu {
+  margin: 8px 0 0 25px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.map-submenu .checkrow {
+  min-height: 28px;
+  justify-content: flex-start;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.map-submenu .checkrow + .checkrow {
+  margin-top: 6px;
+}
+
+.compact-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-control span {
+  min-height: 36px;
+  font-size: 13px;
 }
 
 .map-status {
   position: absolute;
   left: 14px;
   bottom: 14px;
-  z-index: 500;
+  z-index: 800;
   max-width: min(360px, calc(100% - 28px));
   padding: 9px 11px;
   color: var(--ink-soft);
@@ -983,7 +1041,7 @@ body.in-game.learn-mode .score-strip {
   position: absolute;
   left: 50%;
   bottom: 14px;
-  z-index: 520;
+  z-index: 810;
   width: min(560px, calc(100% - 28px));
   transform: translateX(-50%);
 }
@@ -1051,7 +1109,8 @@ body.in-game.learn-mode .score-strip {
 }
 
 .answer-row button,
-#nextButton {
+#nextButton,
+#restartButton {
   min-height: 42px;
   padding: 9px 13px;
   color: #031008;
@@ -1068,9 +1127,14 @@ body.in-game.learn-mode .score-strip {
   margin-top: 2px;
 }
 
-#nextButton {
+#nextButton,
+#restartButton {
   width: 100%;
   margin-top: 10px;
+}
+
+#restartButton {
+  background: var(--gold);
 }
 
 .good,
@@ -1095,7 +1159,7 @@ body.in-game.learn-mode .score-strip {
   position: absolute;
   left: 14px;
   bottom: 64px;
-  z-index: 500;
+  z-index: 815;
   width: min(390px, calc(100% - 28px));
   max-height: 42%;
   overflow: auto;
@@ -1186,6 +1250,19 @@ body.in-game.learn-mode .score-strip {
   font-size: 18px;
   line-height: 1;
   z-index: 2;
+}
+
+.learn-map-dot.selected,
+.learn-map-dot.seat.selected {
+  border-color: #f8fafc;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.36), 0 10px 24px rgba(0, 0, 0, 0.42);
+  z-index: 101;
+}
+
+.learn-map-dot.seat.selected {
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.42), 0 10px 24px rgba(0, 0, 0, 0.42);
 }
 
 .learn-map-dot:hover,

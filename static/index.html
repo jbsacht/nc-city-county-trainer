@@ -194,6 +194,17 @@
         </button>
       </div>
 
+      <div id="learnOptions" class="menu-section learn-option">
+        <label class="checkrow">
+          <input id="learnAllCitiesInput" type="checkbox" />
+          <span>Show every city at once</span>
+        </label>
+        <label class="checkrow">
+          <input id="learnHighlightSeatsInput" type="checkbox" checked />
+          <span>Highlight county seats</span>
+        </label>
+      </div>
+
       <div id="orderOptions" class="menu-section options-grid ordered-mode-option">
         <label>
           Order
@@ -216,14 +227,18 @@
       <div id="cityOptions" class="menu-section city-option">
         <div>
           <div class="option-label">City challenge</div>
-          <div class="segmented-control">
+          <div id="cityTaskControl" class="segmented-control three-options">
             <label>
-              <input type="radio" name="cityTask" value="map" checked />
-              <span>Use map</span>
+              <input type="radio" name="cityTask" value="pick" checked />
+              <span>Pick City</span>
+            </label>
+            <label>
+              <input type="radio" name="cityTask" value="name" />
+              <span>Name City</span>
             </label>
             <label>
               <input type="radio" name="cityTask" value="ultra" />
-              <span>Ultra Hard</span>
+              <span>No Map</span>
             </label>
           </div>
         </div>
@@ -235,8 +250,8 @@
 
         <label id="cityRadiusOption" class="range-label">
           <span>City radius</span>
-          <strong><span id="thresholdLabel">50</span> miles</strong>
-          <input id="thresholdInput" type="range" min="1" max="100" value="50" />
+          <strong><span id="thresholdLabel">5</span> miles</strong>
+          <input id="thresholdInput" type="range" min="1" max="25" value="5" />
         </label>
 
         <label id="seatStarsOption" class="checkrow">
@@ -244,9 +259,16 @@
           <span>Mark county seats with a star</span>
         </label>
 
-        <label id="cityPointTestOption" class="checkrow">
-          <input id="cityPointTestInput" type="checkbox" />
-          <span>Ask for the exact city spot</span>
+      </div>
+
+      <div id="specificPickerOptions" class="menu-section specific-picker-option">
+        <label class="checkrow">
+          <input id="specificCityPickerInput" type="checkbox" />
+          <span>Specific City Picker</span>
+        </label>
+        <label id="specificCityRadiusOption">
+          Target radius
+          <input id="specificCityRadiusInput" type="number" min="1" max="100" step="1" value="5" />
         </label>
       </div>
 
@@ -318,10 +340,66 @@
       <div class="map-toolbar">
         <button id="fitButton" type="button" class="ghost-button">Reset view</button>
         <button id="quitButton" type="button" class="ghost-button quit-button">Quit</button>
-        <label class="map-switch">
-          <input id="highwaysInput" type="checkbox" />
-          <span>Highways</span>
-        </label>
+        <div id="mapDisplayMenu" class="map-display-menu">
+          <button id="mapDisplayButton" type="button" class="ghost-button" aria-expanded="false" aria-controls="mapDisplayPanel">
+            Map
+          </button>
+          <div id="mapDisplayPanel" class="map-display-panel hidden">
+            <section class="map-display-section">
+              <div class="option-label">Overlays</div>
+              <div class="map-toggle-group">
+                <label class="checkrow">
+                  <input id="highwaysInput" type="checkbox" />
+                  <span>Highways</span>
+                </label>
+                <div id="highwayTypeMenu" class="map-submenu hidden">
+                  <label class="checkrow">
+                    <input class="highway-type-input" type="checkbox" data-highway-type="I" checked />
+                    <span>Interstates</span>
+                  </label>
+                  <label class="checkrow">
+                    <input class="highway-type-input" type="checkbox" data-highway-type="U" checked />
+                    <span>US highways</span>
+                  </label>
+                  <label class="checkrow">
+                    <input class="highway-type-input" type="checkbox" data-highway-type="S" checked />
+                    <span>NC highways</span>
+                  </label>
+                </div>
+              </div>
+              <label class="checkrow">
+                <input id="waterInput" type="checkbox" />
+                <span>Water</span>
+              </label>
+            </section>
+
+            <section id="learnDisplayControl" class="map-display-section">
+              <div class="option-label">City markers</div>
+              <div class="segmented-control compact-control">
+                <label>
+                  <input type="radio" name="learnCityDisplay" value="dots" checked />
+                  <span>Dots</span>
+                </label>
+                <label>
+                  <input type="radio" name="learnCityDisplay" value="outlines" />
+                  <span>Outlines</span>
+                </label>
+              </div>
+            </section>
+
+            <section id="answerRevealControl" class="map-display-section">
+              <div class="option-label">After answers</div>
+              <label id="cityOutlineOption" class="checkrow">
+                <input id="cityOutlineInput" type="checkbox" />
+                <span>Show city outline</span>
+              </label>
+              <label id="seatOutlineOption" class="checkrow">
+                <input id="seatOutlineInput" type="checkbox" />
+                <span>Show county seat outline</span>
+              </label>
+            </section>
+          </div>
+        </div>
       </div>
 
       <div id="map"></div>
@@ -340,6 +418,7 @@
 
           <div id="feedback"></div>
           <button id="nextButton" class="hidden" type="button">Next</button>
+          <button id="restartButton" class="hidden" type="button">Run it back</button>
         </section>
       </aside>
 

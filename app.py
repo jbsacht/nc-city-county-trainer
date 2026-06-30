@@ -36,6 +36,13 @@ def load_json(name: str):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def load_optional_json(name: str, fallback):
+    path = DATA / name
+    if not path.exists():
+        return fallback
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def asset_url(name: str) -> str:
     path = STATIC / name
     version = int(path.stat().st_mtime) if path.exists() else 0
@@ -62,10 +69,16 @@ def bootstrap():
     """Single payload so the frontend only does one app-data request."""
     return JSONResponse({
         "cities": load_json("cities.json"),
+        "city_outlines": load_optional_json("city_outlines.geojson", {"type": "FeatureCollection", "features": []}),
         "counties": load_json("counties.geojson"),
         "highways": load_json("highways.geojson"),
         "metadata": load_json("metadata.json"),
     })
+
+
+@app.get("/api/water")
+def water():
+    return JSONResponse(load_optional_json("water.geojson", {"type": "FeatureCollection", "features": []}))
 
 
 @app.get("/api/health")
