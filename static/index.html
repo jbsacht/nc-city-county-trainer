@@ -331,6 +331,16 @@
         <span>Get them all</span>
       </label>
 
+      <label id="shuffleMissesOption" class="menu-section checkrow">
+        <input id="shuffleMissesInput" type="checkbox" checked />
+        <span>Shuffle misses back in</span>
+      </label>
+
+      <label id="flashcardModeOption" class="menu-section checkrow">
+        <input id="flashcardModeInput" type="checkbox" />
+        <span>Flashcard Mode</span>
+      </label>
+
       <button id="startButton" class="start-button" type="button" disabled>Start</button>
     </section>
   </main>
@@ -414,6 +424,13 @@
           <div id="typedAnswerBox" class="answer-row hidden">
             <input id="countyNameInput" autocomplete="off" placeholder="County name" />
             <button id="submitNameButton" type="button">Submit</button>
+          </div>
+
+          <div id="flashcardControls" class="flashcard-controls hidden">
+            <button id="flashcardUnknownButton" class="flashcard-button unknown" type="button">&larr; Still learning</button>
+            <button id="flashcardFlipButton" class="flashcard-button flip" type="button">Show answer</button>
+            <button id="flashcardKnownButton" class="flashcard-button known" type="button">Know &rarr;</button>
+            <button id="flashcardUndoButton" class="flashcard-button undo" type="button" disabled>Undo</button>
           </div>
 
           <div id="feedback"></div>

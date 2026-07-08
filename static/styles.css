@@ -1109,12 +1109,61 @@ body.in-game.learn-mode .score-strip {
 }
 
 .answer-row button,
+.flashcard-button,
 #nextButton,
 #restartButton {
   min-height: 42px;
   padding: 9px 13px;
   color: #031008;
   background: var(--green);
+}
+
+.flashcard-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.flashcard-button {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.flashcard-button.unknown {
+  color: var(--ink);
+  background: var(--red-soft);
+  border: 1px solid rgba(251, 113, 133, 0.42);
+}
+
+.flashcard-button.known {
+  background: var(--green);
+}
+
+.flashcard-button.flip {
+  color: var(--ink);
+  background: var(--control-bg);
+  border: 1px solid var(--line-strong);
+}
+
+.flashcard-button.undo {
+  color: var(--ink);
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid var(--line-strong);
+}
+
+.flashcard-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+body.in-game.flashcard-mode .question-card {
+  display: grid;
+  gap: 10px;
+}
+
+body.in-game.flashcard-mode .selected-county {
+  margin-bottom: 0;
 }
 
 #feedback {
@@ -1468,6 +1517,10 @@ body.in-game.learn-mode .score-strip {
 
   .map-status {
     display: none;
+  }
+
+  .flashcard-controls {
+    grid-template-columns: 1fr;
   }
 
   #infoCard {

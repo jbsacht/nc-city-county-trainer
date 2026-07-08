@@ -44,6 +44,10 @@ const app = {
   countyTask: "pick",
   seatNoMapTask: "county",
   countyFinderDifficulty: "easy",
+  flashcardMode: false,
+  flashcardFlipped: false,
+  lastFlashcardAction: null,
+  shuffleMisses: true,
   appTheme: "dark",
   cursorType: "default",
   cursorPlayer: "p1",
@@ -276,6 +280,8 @@ function getSettings() {
     showHighways: $("highwaysInput").checked,
     showWater: $("waterInput").checked,
     repeatMisses: $("repeatMissesInput").checked,
+    shuffleMisses: $("shuffleMissesInput").checked,
+    flashcardMode: $("flashcardModeInput").checked,
   };
 }
 
@@ -307,6 +313,12 @@ function isUltraHardMode(mode = app.mode) {
 function currentCityTask(mode = app.mode) {
   const useActiveGameState = document.body.classList.contains("in-game") && mode === app.mode;
   return useActiveGameState ? app.cityTask : getRadioValue("cityTask", "pick");
+}
+
+function isFlashcardMode(mode = app.mode) {
+  const useActiveGameState = document.body.classList.contains("in-game") && mode === app.mode;
+  const enabled = useActiveGameState ? app.flashcardMode : $("flashcardModeInput").checked;
+  return enabled && ["city", "county", "seat"].includes(mode);
 }
 
 function isCountyFinderMode(mode = app.mode) {
@@ -757,6 +769,15 @@ function setMapStatus(text) {
   $("mapStatus").textContent = text || "";
 }
 
+function syncMapKeyboardMode() {
+  if (!app.map?.keyboard) return;
+  if (app.stage === "flashcard") {
+    app.map.keyboard.disable();
+  } else {
+    app.map.keyboard.enable();
+  }
+}
+
 function countyDisplayName(name) {
   const text = String(name || "").trim();
   if (!text) return "";
@@ -788,9 +809,11 @@ function updateDockVisibility() {
   const hasFeedback = Boolean($("feedback") && $("feedback").textContent.trim());
   const hasSelected = $("selectedCounty") && !$("selectedCounty").classList.contains("hidden");
   const hasTyped = $("typedAnswerBox") && !$("typedAnswerBox").classList.contains("hidden");
+  const hasFlashcardFlip = $("flashcardFlipButton") && !$("flashcardFlipButton").classList.contains("hidden");
+  const hasFlashcards = $("flashcardControls") && !$("flashcardControls").classList.contains("hidden");
   const hasNext = $("nextButton") && !$("nextButton").classList.contains("hidden");
   const hasRestart = $("restartButton") && !$("restartButton").classList.contains("hidden");
-  panel.classList.toggle("dock-hidden", !(hasFeedback || hasSelected || hasTyped || hasNext || hasRestart));
+  panel.classList.toggle("dock-hidden", !(hasFeedback || hasSelected || hasTyped || hasFlashcardFlip || hasFlashcards || hasNext || hasRestart));
 }
 
 function updateProgressBar(forceComplete = false) {
@@ -875,6 +898,9 @@ function setStageVisual(stage) {
   } else if (stage === "cityName") {
     renderStageSteps(cityStageSteps(), 1, 0);
     setMapStatus("Type the city shown on the map.");
+  } else if (stage === "flashcard") {
+    renderStageSteps(["Study", "Grade", "Repeat"], 1, 0);
+    setMapStatus(app.flashcardFlipped ? "Grade the card." : "Press Space to peek, or grade with Left/Right.");
   } else if (stage === "ultraHardCounty") {
     renderStageSteps(["Read prompt", "Type answer", "Review"], 1, 0);
     setMapStatus("Type your answer.");
@@ -904,6 +930,8 @@ function setStageVisual(stage) {
     renderStageSteps(["Choose", "Practice", "Review"], 0, 0);
     setMapStatus("Choose a mode and start.");
   }
+  document.body.classList.toggle("flashcard-mode", stage === "flashcard");
+  syncMapKeyboardMode();
 }
 
 function updateModeButtons() {
@@ -911,6 +939,7 @@ function updateModeButtons() {
   if (active === "county" && getRadioValue("countyTask", "pick") === "ultra") {
     setRadioValue("countyTask", "pick");
   }
+  updateOrderOptions(active);
   const countyTask = getRadioValue("countyTask", "pick");
   const cityTask = getRadioValue("cityTask", "pick");
   const cityPickMode = active === "city" && cityTask === "pick";
@@ -918,13 +947,15 @@ function updateModeButtons() {
   const countyTaskMode = usesCountyTaskSettings(active);
   const countySeatMode = isCountySeatMode(active);
   const repeatMissesMode = active === "city" || countyTaskMode;
+  const repeatMissesEnabled = $("repeatMissesInput").checked;
+  const flashcardModeVisible = ["city", "county", "seat"].includes(active);
+  const shuffleMissesVisible = repeatMissesMode && repeatMissesEnabled && $("orderSelect").value === "random";
   const cityPlayableMapMode = cityPickMode || cityNameMode;
   const seatPickMode = countySeatMode && countyTask === "pick";
   const specificPickerVisible = seatPickMode;
   const specificPickerEnabled = $("specificCityPickerInput").checked;
   const showCityOutlineReveal = cityPlayableMapMode;
   const showSeatOutlineReveal = countySeatMode && countyTask !== "ultra";
-  updateOrderOptions(active);
   document.querySelectorAll(".mode-card").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === active);
   });
@@ -952,6 +983,8 @@ function updateModeButtons() {
   showMenuSection("seatNoMapOptions", countySeatMode && countyTask === "ultra");
   showMenuSection("seatOutlineOption", showSeatOutlineReveal, "flex");
   showMenuSection("repeatMissesOption", repeatMissesMode, "flex");
+  showMenuSection("shuffleMissesOption", shuffleMissesVisible, "flex");
+  showMenuSection("flashcardModeOption", flashcardModeVisible, "flex");
   showMenuSection("directionOption", $("orderSelect").value !== "random" && shouldShowOrderOptions(active));
   setModePill();
   updateStartAvailability();
@@ -1018,6 +1051,8 @@ function exitGameMode() {
   document.body.classList.remove("in-game");
   document.body.classList.remove("learn-mode");
   document.body.classList.remove("ultra-hard-mode");
+  document.body.classList.remove("flashcard-mode");
+  syncMapKeyboardMode();
 }
 
 function quitToMenu() {
@@ -1032,6 +1067,10 @@ function quitToMenu() {
   $("nextButton").classList.add("hidden");
   $("restartButton").classList.add("hidden");
   $("typedAnswerBox").classList.add("hidden");
+  $("flashcardFlipButton").classList.add("hidden");
+  $("flashcardControls").classList.add("hidden");
+  app.lastFlashcardAction = null;
+  syncFlashcardUndoButton();
   setFeedback("");
   setSelectedCounty("");
   $("questionTitle").textContent = "Ready";
@@ -1930,12 +1969,29 @@ function cityQuestionKey(city) {
   return `city:${norm(city.name)}:${coord}`;
 }
 
+function shouldShuffleMissesBackIn() {
+  const settings = getSettings();
+  return settings.repeatMisses && settings.order === "random" && app.shuffleMisses;
+}
+
+function requeueMissedQuestion(item) {
+  if (!shouldShuffleMissesBackIn()) {
+    app.sequence.push(item);
+    return;
+  }
+  const nextIndex = Math.min(app.index + 1, app.sequence.length);
+  const firstPossibleIndex = nextIndex < app.sequence.length ? nextIndex + 1 : nextIndex;
+  const slots = app.sequence.length - firstPossibleIndex + 1;
+  const insertAt = firstPossibleIndex + Math.floor(Math.random() * Math.max(1, slots));
+  app.sequence.splice(insertAt, 0, item);
+}
+
 function recordRepeatProgress(correct, item, key) {
   if (!key) return;
   if (correct) {
     app.completedCountyNames.add(key);
   } else if (getSettings().repeatMisses && !app.completedCountyNames.has(key)) {
-    app.sequence.push(item);
+    requeueMissedQuestion(item);
   }
 }
 
@@ -2087,6 +2143,8 @@ function buildSequence() {
   app.countyTask = s.countyTask;
   app.seatNoMapTask = s.seatNoMapTask;
   app.countyFinderDifficulty = s.countyFinderDifficulty;
+  app.flashcardMode = s.flashcardMode;
+  app.shuffleMisses = s.shuffleMisses;
   setModePill();
   app.requiredCountyNames = new Set();
   app.completedCountyNames = new Set();
@@ -2119,6 +2177,7 @@ function buildSequence() {
   app.index = 0;
   app.scoreCorrect = 0;
   app.scoreTotal = 0;
+  app.lastFlashcardAction = null;
   updateScore();
   updateProgressBar();
 }
@@ -2143,6 +2202,9 @@ function startQuiz(options = {}) {
   $("nextButton").classList.add("hidden");
   $("restartButton").classList.add("hidden");
   $("typedAnswerBox").classList.add("hidden");
+  $("flashcardFlipButton").classList.add("hidden");
+  app.lastFlashcardAction = null;
+  syncFlashcardUndoButton();
   setFeedback("");
   requestAnimationFrame(() => {
     if (!app.map) {
@@ -2194,6 +2256,8 @@ function finishRound(message = "") {
   $("nextButton").classList.add("hidden");
   $("restartButton").classList.remove("hidden");
   $("typedAnswerBox").classList.add("hidden");
+  $("flashcardFlipButton").classList.add("hidden");
+  $("flashcardControls").classList.add("hidden");
   setFeedback("");
   setStageVisual("finished");
   updateProgressBar(true);
@@ -2213,13 +2277,279 @@ function nextQuestion() {
   $("restartButton").classList.add("hidden");
   $("nextButton").textContent = "Click anywhere to continue";
   $("typedAnswerBox").classList.add("hidden");
+  $("flashcardFlipButton").classList.add("hidden");
+  $("flashcardControls").classList.add("hidden");
   updateProgressBar();
+  if (isFlashcardMode()) {
+    askFlashcardQuestion();
+    return;
+  }
   if (app.mode === "city") askCityQuestion();
   if (app.mode === "county" && app.countyTask === "pick") askCountyLocateQuestion();
   if (app.mode === "county" && app.countyTask === "name") askCountyNameQuestion();
   if (app.mode === "seat" && app.countyTask === "pick") askCountySeatPickQuestion();
   if (app.mode === "seat" && app.countyTask === "name") askCountySeatNameQuestion();
   if (app.mode === "seat" && app.countyTask === "ultra") askCountySeatUltraHardQuestion();
+}
+
+function setAnswerCard(label, answer, detail = "", state = "") {
+  const node = $("selectedCounty");
+  node.className = `selected-county ${state}`.trim();
+  node.innerHTML = `
+    <span>${escapeHtml(label)}</span>
+    <strong>${escapeHtml(answer)}</strong>
+    ${detail ? `<em>${escapeHtml(detail)}</em>` : ""}
+  `;
+  updateDockVisibility();
+}
+
+function countyListText(countyNames) {
+  return uniqueCountyNames(countyNames).map(countyDisplayName).join(" / ");
+}
+
+function flashcardQuestionKey(item = app.current) {
+  if (app.mode === "city") return cityQuestionKey(item);
+  if (app.mode === "county") return item || "";
+  if (app.mode === "seat") return seatCountyName(item);
+  return "";
+}
+
+function askFlashcardQuestion() {
+  const item = app.sequence[app.index];
+  app.current = item;
+  app.stage = "flashcard";
+  app.flashcardFlipped = false;
+  app.answered = false;
+  $("progressText").textContent = currentProgress();
+  $("typedAnswerBox").classList.add("hidden");
+  $("nextButton").classList.add("hidden");
+  $("flashcardFlipButton").classList.remove("hidden");
+  $("flashcardFlipButton").textContent = "Show answer";
+  $("flashcardControls").classList.remove("hidden");
+  syncFlashcardUndoButton();
+  setSelectedCounty("");
+  setFeedback("");
+
+  renderCurrentFlashcardSide();
+
+  setStageVisual("flashcard");
+  updateDockVisibility();
+}
+
+function clearFlashcardReveal() {
+  setSelectedCounty("");
+  clearInfo();
+  $("ultraHardPrompt").textContent = "";
+  if (app.markerLayer) app.markerLayer.clearLayers();
+  if (app.countyLayer) {
+    app.countyLayer.eachLayer((layer) => app.countyLayer.resetStyle(layer));
+    applyRetiredCountyStyles();
+  }
+  refreshOverlayOrder();
+}
+
+function renderCurrentFlashcardSide() {
+  clearFlashcardReveal();
+  if (app.mode === "city") renderCityFlashcard(app.current, app.flashcardFlipped);
+  if (app.mode === "county") renderCountyFlashcard(app.current, app.flashcardFlipped);
+  if (app.mode === "seat") renderCountySeatFlashcard(app.current, app.flashcardFlipped);
+}
+
+function renderCityFlashcard(city, reveal = app.flashcardFlipped) {
+  if (app.cityTask === "ultra") {
+    const config = noMapQuestionConfig(city, "city");
+    $("questionTitle").textContent = config.prompt;
+    $("questionHelp").textContent = config.help;
+    $("ultraHardPrompt").textContent = config.prompt;
+    if (reveal) setAnswerCard("Answer", config.answerText, config.resultText);
+    return;
+  }
+
+  const counties = countyListText(cityCountyNames(city));
+  if (app.cityTask === "name") {
+    $("questionTitle").textContent = "Name this city";
+    $("questionHelp").textContent = reveal ? "City revealed." : "Study the point on the map.";
+    if (reveal) {
+      app.markerLayer.clearLayers();
+      revealCityAnswerTarget(city, `${escapeHtml(city.name)}: exact learning point`);
+      setAnswerCard("City", city.name, counties || "County unknown");
+      showInfoForCity(city, `<span class="good">Flashcard.</span> ${escapeHtml(counties || "County unknown")}.`);
+    } else {
+      drawCityPromptTarget(city, "City location");
+    }
+    return;
+  }
+
+  const star = getSettings().showStars && city.is_county_seat ? " ★" : "";
+  $("questionTitle").textContent = `${city.name}${star}`;
+  $("questionHelp").textContent = reveal ? "City location shown." : "Picture the city location.";
+  if (!reveal) return;
+  revealCityAnswerTarget(city, `${escapeHtml(city.name)}: exact learning point`);
+  setAnswerCard("City location", city.name, counties || "County unknown");
+  showInfoForCity(city, `<span class="good">Flashcard.</span> City location shown.`);
+}
+
+function renderCountyFlashcard(county, reveal = app.flashcardFlipped) {
+  $("questionTitle").textContent = app.countyTask === "name" ? "Name this county" : `${county} County`;
+  $("questionHelp").textContent = reveal ? "County revealed." : (app.countyTask === "name" ? "Study the highlighted county." : "Picture this county on the map.");
+  const layer = getCountyLayer(county);
+  if (app.countyTask === "name" || reveal) {
+    if (layer) layer.setStyle(targetStyle);
+  }
+  if (reveal) setAnswerCard("County", countyDisplayName(county), "Highlighted on the map.");
+}
+
+function renderCountySeatFlashcard(seat, reveal = app.flashcardFlipped) {
+  if (app.countyTask === "ultra") {
+    const config = noMapQuestionConfig(seat, "seat");
+    $("questionTitle").textContent = config.prompt;
+    $("questionHelp").textContent = config.help;
+    $("ultraHardPrompt").textContent = config.prompt;
+    if (reveal) setAnswerCard("Answer", config.answerText, config.resultText);
+    return;
+  }
+
+  const county = seatCountyName(seat);
+  const layer = getCountyLayer(county);
+
+  if (app.countyTask === "name") {
+    $("questionTitle").textContent = countyDisplayName(county);
+    $("questionHelp").textContent = reveal ? "County seat revealed." : "Study the county seat location.";
+    if (layer) layer.setStyle(targetStyle);
+    if (reveal) {
+      app.markerLayer.clearLayers();
+      revealCountySeatAnswerTarget(seat, `${escapeHtml(seat.name)}: county seat of ${escapeHtml(countyDisplayName(county))}`);
+      setAnswerCard("County seat", seat.name, countyDisplayName(county));
+      showInfoForCity(seat, `<span class="good">Flashcard.</span> County seat of ${escapeHtml(countyDisplayName(county))}.`);
+    } else {
+      drawCountySeatPromptTarget(seat, "County seat location");
+    }
+  } else {
+    $("questionTitle").textContent = seat.name;
+    $("questionHelp").textContent = reveal ? "County revealed." : "Picture which county has this seat.";
+    if (!reveal) return;
+    if (layer) layer.setStyle(targetStyle);
+    revealCountySeatAnswerTarget(seat, `${escapeHtml(seat.name)}: county seat of ${escapeHtml(countyDisplayName(county))}`);
+    setAnswerCard("County", countyDisplayName(county), `County seat: ${seat.name}`);
+    showInfoForCity(seat, `<span class="good">Flashcard.</span> County seat of ${escapeHtml(countyDisplayName(county))}.`);
+  }
+}
+
+function applyFlashcardResultSideEffects(known) {
+  const repeatMisses = getSettings().repeatMisses;
+  if (app.mode === "county" && app.countyTask === "pick") {
+    const county = app.current;
+    if (known) {
+      app.retiredCountyResults.set(county, "correct");
+    } else if (!repeatMisses) {
+      app.retiredCountyResults.set(county, "wrong");
+    }
+  }
+
+  if (app.mode === "seat" && app.countyTask === "pick") {
+    const seat = app.current;
+    const county = seatCountyName(seat);
+    if (known) {
+      app.retiredCountyResults.set(county, "correct");
+      retainCountySeatPoint(seat, "correct");
+    } else if (!repeatMisses) {
+      app.retiredCountyResults.set(county, "wrong");
+      retainCountySeatPoint(seat, "wrong");
+    }
+  }
+}
+
+function syncFlashcardUndoButton() {
+  const button = $("flashcardUndoButton");
+  if (button) button.disabled = !app.lastFlashcardAction;
+}
+
+function captureFlashcardUndoSnapshot() {
+  return {
+    sequence: [...app.sequence],
+    completedCountyNames: new Set(app.completedCountyNames),
+    retiredCountyResults: new Map(app.retiredCountyResults),
+    index: app.index,
+    scoreCorrect: app.scoreCorrect,
+    scoreTotal: app.scoreTotal,
+    current: app.current,
+  };
+}
+
+function undoFlashcardGrade() {
+  if (!app.lastFlashcardAction) return false;
+  const snapshot = app.lastFlashcardAction;
+  app.sequence = [...snapshot.sequence];
+  app.completedCountyNames = new Set(snapshot.completedCountyNames);
+  app.retiredCountyResults = new Map(snapshot.retiredCountyResults);
+  app.index = snapshot.index;
+  app.scoreCorrect = snapshot.scoreCorrect;
+  app.scoreTotal = snapshot.scoreTotal;
+  app.current = snapshot.current;
+  app.flashcardFlipped = false;
+  app.lastFlashcardAction = null;
+
+  clearRetiredSeatDots();
+  rebuildRetiredSeatTargets();
+  updateScore();
+  updateProgressBar();
+  nextQuestion();
+  setFeedback("Last flashcard grade undone.");
+  syncFlashcardUndoButton();
+  return true;
+}
+
+function setFlashcardFlipped(flipped) {
+  if (!isFlashcardMode() || app.stage !== "flashcard") return false;
+  app.flashcardFlipped = Boolean(flipped);
+  $("flashcardFlipButton").textContent = app.flashcardFlipped ? "Hide answer" : "Show answer";
+  setFeedback("");
+  renderCurrentFlashcardSide();
+  setStageVisual("flashcard");
+  updateDockVisibility();
+  return true;
+}
+
+function flipFlashcard() {
+  return setFlashcardFlipped(!app.flashcardFlipped);
+}
+
+function gradeFlashcard(known) {
+  if (!isFlashcardMode() || app.stage !== "flashcard") return false;
+  app.lastFlashcardAction = captureFlashcardUndoSnapshot();
+  app.scoreTotal += 1;
+  if (known) app.scoreCorrect += 1;
+  recordRepeatProgress(known, app.current, flashcardQuestionKey(app.current));
+  applyFlashcardResultSideEffects(known);
+  updateScore();
+  updateProgressBar(true);
+  app.index += 1;
+  nextQuestion();
+  syncFlashcardUndoButton();
+  return true;
+}
+
+function handleFlashcardKeydown(event) {
+  if (!isFlashcardMode()) return;
+  const key = String(event.key || "").toLowerCase();
+  const isUndoKey = (event.metaKey || event.ctrlKey) && key === "z";
+  const isFlashcardStage = app.stage === "flashcard";
+  const isFlipKey = isFlashcardStage && (event.code === "Space" || event.key === " ");
+  const isGradeKey = isFlashcardStage && (event.key === "ArrowLeft" || event.key === "ArrowRight");
+  const canUndo = isUndoKey && (app.stage === "flashcard" || app.stage === "finished");
+  if (!isFlipKey && !isGradeKey && !canUndo) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (event.repeat) return;
+
+  if (canUndo) {
+    undoFlashcardGrade();
+  } else if (isFlipKey) {
+    flipFlashcard();
+  } else {
+    gradeFlashcard(event.key === "ArrowRight");
+  }
 }
 
 function askCityQuestion() {
@@ -2514,7 +2844,7 @@ function handleCountyLocateClick(clicked, layer) {
     app.completedCountyNames.add(target);
     app.retiredCountyResults.set(target, "correct");
   } else if (repeatMisses && !app.completedCountyNames.has(target)) {
-    app.sequence.push(target);
+    requeueMissedQuestion(target);
   } else {
     app.retiredCountyResults.set(target, "wrong");
   }
@@ -2571,7 +2901,7 @@ function handleCountyNameSubmit() {
     app.scoreCorrect += 1;
     app.completedCountyNames.add(target);
   } else if (repeatMisses && !app.completedCountyNames.has(target)) {
-    app.sequence.push(target);
+    requeueMissedQuestion(target);
   }
   updateScore();
   updateProgressBar(true);
@@ -2694,7 +3024,7 @@ function handleCountySeatPickClick(clicked, layer, clickedLatLng) {
     app.retiredCountyResults.set(targetCounty, "correct");
     retainCountySeatPoint(seat, "correct");
   } else if (repeatMisses && !app.completedCountyNames.has(targetCounty)) {
-    app.sequence.push(seat);
+    requeueMissedQuestion(seat);
   } else {
     app.retiredCountyResults.set(targetCounty, "wrong");
     retainCountySeatPoint(seat, "wrong");
@@ -2791,7 +3121,7 @@ function handleCountySeatNameSubmit() {
     app.scoreCorrect += 1;
     app.completedCountyNames.add(county);
   } else if (repeatMisses && !app.completedCountyNames.has(county)) {
-    app.sequence.push(seat);
+    requeueMissedQuestion(seat);
   }
   updateScore();
   updateProgressBar(true);
@@ -3211,6 +3541,9 @@ $("orderSelect").addEventListener("change", () => {
   if ($("orderSelect").value === "population") $("directionSelect").value = "desc";
   updateModeButtons();
 });
+$("repeatMissesInput").addEventListener("change", updateModeButtons);
+$("shuffleMissesInput").addEventListener("change", updateModeButtons);
+$("flashcardModeInput").addEventListener("change", updateModeButtons);
 document.querySelectorAll('input[name="countyTask"]').forEach((input) => {
   input.addEventListener("change", updateModeButtons);
 });
@@ -3247,6 +3580,7 @@ $("countyFilterBackdrop").addEventListener("click", () => setCountyFilterOpen(fa
 $("countyFilterSelectAllButton").addEventListener("click", () => setCountyFilterSelection(allCountyNames()));
 $("countyFilterDeselectAllButton").addEventListener("click", () => setCountyFilterSelection([]));
 document.addEventListener("fullscreenchange", updateFullscreenButton);
+document.addEventListener("keydown", handleFlashcardKeydown, true);
 document.addEventListener("keydown", (event) => {
   toggleHoveredLearnCountyKnown(event);
   if (event.key === "Enter" && !event.repeat) {
@@ -3281,13 +3615,17 @@ $("nextButton").addEventListener("click", () => {
   nextQuestion();
 });
 $("restartButton").addEventListener("click", () => startQuiz({ preserveMapView: true }));
+$("flashcardFlipButton").addEventListener("click", flipFlashcard);
+$("flashcardUnknownButton").addEventListener("click", () => gradeFlashcard(false));
+$("flashcardKnownButton").addEventListener("click", () => gradeFlashcard(true));
+$("flashcardUndoButton").addEventListener("click", undoFlashcardGrade);
 $("submitNameButton").addEventListener("click", handleCountyNameSubmit);
 $("countyNameInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter") handleCountyNameSubmit();
 });
 
 const dockObserver = new MutationObserver(updateDockVisibility);
-["feedback", "selectedCounty", "typedAnswerBox", "nextButton", "restartButton"].forEach((id) => {
+["feedback", "selectedCounty", "typedAnswerBox", "flashcardFlipButton", "flashcardControls", "flashcardUndoButton", "nextButton", "restartButton"].forEach((id) => {
   dockObserver.observe($(id), {
     attributes: true,
     childList: true,
