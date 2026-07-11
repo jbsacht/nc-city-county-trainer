@@ -9,7 +9,8 @@ set "VENV_ACTIVATE=.venv\Scripts\activate.bat"
 
 if not exist "%VENV_ACTIVATE%" (
     echo Could not find %VENV_ACTIVATE%.
-    echo Create the virtual environment and install dependencies first, then run this file again.
+    echo This launcher only starts an existing Windows virtual environment.
+    echo Create .venv separately, then run this file again.
     pause
     exit /b 1
 )
