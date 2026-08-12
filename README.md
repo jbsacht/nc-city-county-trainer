@@ -62,14 +62,6 @@ pip install -r requirements.txt
 python scripts/build_data.py
 ```
 
-If the Census API asks for a key, get a free Census API key and run:
-
-```bash
-export CENSUS_API_KEY="your_key_here"   # macOS/Linux
-# set CENSUS_API_KEY=your_key_here      # Windows cmd
-python scripts/build_data.py
-```
-
 ## Run
 
 ```bash
