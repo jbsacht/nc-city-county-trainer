@@ -31,7 +31,7 @@ def load_json(name: str):
     if not path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Missing {name}. Run: python scripts/build_data.py"
+            detail=f"Missing bundled data file: {name}. Restore static/data from the repository."
         )
     return json.loads(path.read_text(encoding="utf-8"))
 

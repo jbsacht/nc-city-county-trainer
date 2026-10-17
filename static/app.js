@@ -1096,7 +1096,7 @@ function isLearnCitySelected(city) {
 
 function showInfoForCity(city, resultHtml = "") {
   const founded = city.founded_date ? `${city.founded_date}${city.founded_year ? ` (${city.founded_year})` : ""}` : "Unknown";
-  const pop = city.population ? `${fmtNum(city.population)}${city.population_year ? ` (${city.population_year})` : ""}` : "Unknown";
+  const pop = city.population != null ? `${fmtNum(city.population)}${city.population_year ? ` (${city.population_year})` : ""}` : "Unknown";
   const seat = city.is_county_seat ? `Yes${city.county_seat_of ? ` - ${city.county_seat_of} County` : ""}` : "No";
   $("infoCard").innerHTML = `
     <h3>${escapeHtml(city.name)}${city.is_county_seat ? " ★" : ""}</h3>
@@ -2154,7 +2154,8 @@ function buildSequence() {
     app.sequence = [];
   } else if (s.mode === "city") {
     const usable = app.data.cities.filter((city) => (
-      Number.isFinite(Number(city.lat))
+      city.is_active_municipality !== false
+      && Number.isFinite(Number(city.lat))
       && Number.isFinite(Number(city.lon))
       && cityMatchesCountyFilter(city)
     ));

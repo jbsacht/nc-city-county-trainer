@@ -1,0 +1,31 @@
+{
+  "municipality_source": "https://en.wikipedia.org/wiki/List_of_municipalities_in_North_Carolina",
+  "county_seat_source": "https://en.wikipedia.org/wiki/List_of_counties_in_North_Carolina",
+  "county_boundary_source": "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county_500k.zip",
+  "place_boundary_source": "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_37_place_500k.zip",
+  "primary_roads_source": "https://www2.census.gov/geo/tiger/TIGER2024/PRISECROADS/tl_2024_37_prisecroads.zip",
+  "area_water_source": "https://www2.census.gov/geo/tiger/TIGER2024/AREAWATER/tl_2024_37001_areawater.zip",
+  "linear_water_source": "https://www2.census.gov/geo/tiger/TIGER2024/LINEARWATER/tl_2024_37001_linearwater.zip",
+  "population_source": "https://api.census.gov/data/2020/dec/pl",
+  "population_download_source": "https://www2.census.gov/programs-surveys/decennial/2020/data/01-Redistricting_File--PL_94-171/North_Carolina/nc2020.pl.zip",
+  "population_fallback_source": "https://en.wikipedia.org/wiki/List_of_municipalities_in_North_Carolina",
+  "city_count": 552,
+  "generated_at_unix": 1782447478,
+  "notes": [
+    "City quiz locations use Census polygon centroids when inside both source and displayed boundaries; otherwise an interior point in the primary county is used.",
+    "Optional city outlines use simplified Census place polygons matched by GEOID.",
+    "Highways include Interstate, US, and NC state routes from Census TIGER primary and secondary roads.",
+    "Water includes simplified TIGER area-water polygons plus named river centerlines.",
+    "Founded dates are from Wikidata P571 when available, so some records may be blank.",
+    "Population is 2020 Census place population when the Census API returns it; otherwise the Wikipedia municipality table is used where available.",
+    "County memberships reviewed against 2020 Census relationships and NC OSBM 2025 municipal data.",
+    "Camden CDP is retained as a county-seat location; Spencer Mountain is labeled inactive. Neither is included in active-municipality quizzes.",
+    "Founding dates remain unknown where no verified date is available.",
+    "Reviewed static dataset bundled with the repository; no data download or generation step is required."
+  ],
+  "active_municipality_count": 550,
+  "data_review_date": "2026-10-17",
+  "county_membership_source": "https://www.osbm.nc.gov/facts-figures/population-demographics/state-demographer/municipal-population-estimates/population-distribution-municipalities-more-one-county",
+  "municipality_roster_source": "https://www.osbm.nc.gov/facts-figures/population-demographics/state-demographer/municipal-population-estimates/aspects-municipal-population-change",
+  "spencer_mountain_status_source": "https://www.nctreasurer.gov/divisions/state-and-local-government-finance/lgc/local-government-commission"
+}

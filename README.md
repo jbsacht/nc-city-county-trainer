@@ -36,16 +36,15 @@ Click any county on the blank map to reveal its name, county seat, and dots for 
 - Open Settings from the top right to switch between Dark and Beach themes.
 - The pointer can be changed from the default cursor to Wii-style player 1-4 pointers sourced from `imgs/pointers.png`. It automatically uses the point cursor normally, the open hand for clickable targets, and the fist while dragging the map.
 
-## Data sources
+## Bundled data
 
-The build script downloads data once and writes it to `static/data`.
+The reviewed dataset is included in `static/data` and checked into Git. A fresh clone already contains the county boundaries, city records and outlines, highways, water, and source metadata. No data download or generation step is needed.
 
-- Wikipedia: list of North Carolina municipalities and population fallback when Census sources are unavailable.
-- Wikipedia: county seats from the North Carolina counties list.
-- U.S. Census cartographic boundary files: counties and places.
-- U.S. Census TIGER/Line primary roads: highway overlay.
-- U.S. Census 2020 API or PL download: place populations.
-- Wikidata: founded/incorporated dates and fallback coordinates when available.
+The dataset includes 550 active municipalities, Camden CDP as a county-seat location, and inactive Spencer Mountain for learning. Camden and Spencer Mountain are excluded from active municipality quizzes. The data was reviewed on October 17, 2026.
+
+Sources include U.S. Census 2024 boundaries and TIGER roads/water, original 2020 Census population counts, NC OSBM 2025 municipality and county-membership tables, and NC.gov county-seat information. Source URLs and limitations are recorded in `static/data/metadata.json`.
+
+The generated runtime dataset is about 6.7 MB. Original download archives and data-generation tooling are not part of the repository.
 
 ## Install
 
@@ -54,12 +53,6 @@ python -m venv .venv
 source .venv/bin/activate      # macOS/Linux
 # .venv\Scripts\activate      # Windows PowerShell/cmd equivalent
 pip install -r requirements.txt
-```
-
-## Build the map/data files
-
-```bash
-python scripts/build_data.py
 ```
 
 ## Run
@@ -76,11 +69,8 @@ http://127.0.0.1:8000
 
 ## Practical notes
 
-- The city click target is the Census place polygon centroid. That is usually the best point for a geography-learning quiz because it avoids geocoding one-off addresses and keeps everything local.
-- Some founded dates may be blank because the municipality's Wikidata item may not have an inception/incorporation date.
-- The highway layer is primary roads only so it helps orientation without adding city labels that would spoil the quiz.
-- Data files are static after the build. To update them later, delete `.cache` and rerun `python scripts/build_data.py`.
-
-### Notes on data downloads
-
-The builder tries multiple Census boundary-file vintages automatically. Current Census GENZ releases publish county boundaries as a national file such as `cb_2024_us_county_500k.zip`, then the script filters it to North Carolina. The optional Census population API now may require a `CENSUS_API_KEY`; if you do not set one, the app uses the downloadable 2020 PL file for place populations and falls back to the Wikipedia municipality population table where available.
+- City quiz points are inside both the source municipal polygon and the displayed simplified outline. A polygon centroid is retained when it meets that requirement; otherwise an interior point is used.
+- Founding dates remain unknown when no verified date is available.
+- The highway layer includes Interstate, US, and NC state routes.
+- Boundaries retain their documented 2024 vintage; population values are original 2020 Census counts, not current estimates.
+- To update data, edit or replace the reviewed files in `static/data`, validate affected records and geometry, and commit the data changes together with the source metadata. Normal installation does not regenerate data.
